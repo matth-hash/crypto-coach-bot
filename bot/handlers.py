@@ -1,6 +1,6 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -10,19 +10,19 @@ from locales.translations import (
     TEXTS, LEVEL_BUTTONS, STYLE_BUTTONS, GOAL_BUTTONS
 )
 from ai_coach import get_coaching_response
+from database import (
+    get_user, create_user, update_user_profile,
+    get_conversation_history, save_message,
+    clear_conversation_history, update_xp
+)
 
 router = Router()
 
-# États du profil utilisateur
 class ProfileSetup(StatesGroup):
     waiting_level = State()
     waiting_style = State()
     waiting_goal = State()
     coaching = State()
-
-# Stockage simple en mémoire (on ajoutera une DB plus tard)
-user_profiles = {}
-conversation_histories = {}
 
 def make_keyboard(buttons: list, prefix: str):
     builder = InlineKeyboardBuilder()
@@ -31,26 +31,109 @@ def make_keyboard(buttons: list, prefix: str):
     builder.adjust(1)
     return builder.as_markup()
 
+# ─── /start ─────────────────────────────────────────────────────
+
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
-    lang = detect_language(message.from_user.language_code)
     user_id = message.from_user.id
+    username = message.from_user.username or message.from_user.first_name
+    lang = detect_language(message.from_user.language_code)
 
-    # Initialiser le profil
-    user_profiles[user_id] = {"language": lang}
-    conversation_histories[user_id] = []
+    # Vérifier si l'utilisateur existe déjà
+    existing_user = await get_user(user_id)
 
+    if existing_user and existing_user.get("level"):
+        # Utilisateur connu — on le reconnecte
+        lang = existing_user["language"]
+        await state.update_data(language=lang)
+        await state.set_state(ProfileSetup.coaching)
+
+        returning_messages = {
+            "fr": f"👋 Content de te revoir ! Ton profil est intact. Pose-moi une question !",
+            "en": f"👋 Welcome back! Your profile is intact. Ask me a question!",
+            "es": f"👋 ¡Bienvenido de nuevo! Tu perfil está intacto. ¡Hazme una pregunta!",
+            "pt": f"👋 Bem-vindo de volta! Seu perfil está intacto. Faça-me uma pergunta!",
+        }
+        await message.answer(returning_messages[lang])
+        return
+
+    # Nouvel utilisateur
+    await create_user(user_id, username, lang)
     await state.update_data(language=lang)
-
-    # Message de bienvenue
     await message.answer(TEXTS["welcome"][lang])
-
-    # Question niveau
     await message.answer(
         TEXTS["question_level"][lang],
         reply_markup=make_keyboard(LEVEL_BUTTONS[lang], "level")
     )
     await state.set_state(ProfileSetup.waiting_level)
+
+# ─── /reset ─────────────────────────────────────────────────────
+
+@router.message(Command("reset"))
+async def cmd_reset(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    user = await get_user(user_id)
+    lang = user["language"] if user else "en"
+
+    await clear_conversation_history(user_id)
+    await update_user_profile(user_id, level=None, trading_style=None, goal=None)
+    await state.clear()
+
+    reset_messages = {
+        "fr": "🔄 Profil réinitialisé. Envoie /start pour recommencer.",
+        "en": "🔄 Profile reset. Send /start to start over.",
+        "es": "🔄 Perfil reiniciado. Envía /start para empezar de nuevo.",
+        "pt": "🔄 Perfil redefinido. Envie /start para recomeçar.",
+    }
+    await message.answer(reset_messages[lang])
+
+# ─── /profil ────────────────────────────────────────────────────
+
+@router.message(Command("profil"))
+async def cmd_profile(message: Message):
+    user_id = message.from_user.id
+    user = await get_user(user_id)
+
+    if not user:
+        await message.answer("Envoie /start pour créer ton profil.")
+        return
+
+    lang = user["language"]
+
+    profile_texts = {
+        "fr": (
+            f"👤 *Ton profil*\n\n"
+            f"📊 Niveau : {user.get('level', 'Non défini')}\n"
+            f"⚡ Style : {user.get('trading_style', 'Non défini')}\n"
+            f"🎯 Objectif : {user.get('goal', 'Non défini')}\n"
+            f"⭐ XP : {user.get('xp', 0)} points\n"
+        ),
+        "en": (
+            f"👤 *Your profile*\n\n"
+            f"📊 Level: {user.get('level', 'Not set')}\n"
+            f"⚡ Style: {user.get('trading_style', 'Not set')}\n"
+            f"🎯 Goal: {user.get('goal', 'Not set')}\n"
+            f"⭐ XP: {user.get('xp', 0)} points\n"
+        ),
+        "es": (
+            f"👤 *Tu perfil*\n\n"
+            f"📊 Nivel: {user.get('level', 'No definido')}\n"
+            f"⚡ Estilo: {user.get('trading_style', 'No definido')}\n"
+            f"🎯 Objetivo: {user.get('goal', 'No definido')}\n"
+            f"⭐ XP: {user.get('xp', 0)} puntos\n"
+        ),
+        "pt": (
+            f"👤 *Seu perfil*\n\n"
+            f"📊 Nível: {user.get('level', 'Não definido')}\n"
+            f"⚡ Estilo: {user.get('trading_style', 'Não definido')}\n"
+            f"🎯 Objetivo: {user.get('goal', 'Não definido')}\n"
+            f"⭐ XP: {user.get('xp', 0)} pontos\n"
+        ),
+    }
+
+    await message.answer(profile_texts[lang], parse_mode="Markdown")
+
+# ─── Étapes du profil ────────────────────────────────────────────
 
 @router.callback_query(ProfileSetup.waiting_level)
 async def process_level(callback: CallbackQuery, state: FSMContext):
@@ -59,7 +142,7 @@ async def process_level(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
 
     level = callback.data.split(":", 1)[1]
-    user_profiles[user_id]["level"] = level
+    await update_user_profile(user_id, level=level)
 
     await callback.message.edit_reply_markup()
     await callback.message.answer(
@@ -76,7 +159,7 @@ async def process_style(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
 
     style = callback.data.split(":", 1)[1]
-    user_profiles[user_id]["style"] = style
+    await update_user_profile(user_id, trading_style=style)
 
     await callback.message.edit_reply_markup()
     await callback.message.answer(
@@ -93,35 +176,37 @@ async def process_goal(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
 
     goal = callback.data.split(":", 1)[1]
-    user_profiles[user_id]["goal"] = goal
+    await update_user_profile(user_id, goal=goal)
 
     await callback.message.edit_reply_markup()
     await callback.message.answer(TEXTS["profile_complete"][lang])
 
-    # Premier message de coaching personnalisé
     thinking_msg = await callback.message.answer(TEXTS["thinking"][lang])
 
-    profile = user_profiles[user_id]
+    user = await get_user(user_id)
     intro_messages = {
-        "fr": f"Mon profil est maintenant configuré. Génère-moi un message de bienvenue personnalisé et donne-moi un premier conseil adapté à mon niveau et mon style.",
-        "en": f"My profile is now set up. Generate a personalized welcome message and give me a first tip adapted to my level and style.",
-        "es": f"Mi perfil está ahora configurado. Genera un mensaje de bienvenida personalizado y dame un primer consejo adaptado a mi nivel y estilo.",
-        "pt": f"Meu perfil está configurado. Gere uma mensagem de boas-vindas personalizada e me dê uma primeira dica adaptada ao meu nível e estilo.",
+        "fr": "Mon profil est configuré. Génère un message de bienvenue personnalisé et donne-moi un premier conseil adapté.",
+        "en": "My profile is set up. Generate a personalized welcome and give me a first adapted tip.",
+        "es": "Mi perfil está configurado. Genera una bienvenida personalizada y dame un primer consejo adaptado.",
+        "pt": "Meu perfil está configurado. Gere uma boas-vindas personalizada e me dê uma primeira dica adaptada.",
     }
 
     response = await get_coaching_response(
-        intro_messages[lang],
-        lang,
-        profile,
-        []
+        intro_messages[lang], lang, user, []
     )
+
+    # Sauvegarder en base
+    await save_message(user_id, "user", intro_messages[lang])
+    await save_message(user_id, "assistant", response)
+    await update_xp(user_id, 20)  # +20 XP pour avoir complété le profil
 
     await thinking_msg.delete()
     await callback.message.answer(response)
     await callback.message.answer(TEXTS["ask_question"][lang])
-
     await state.set_state(ProfileSetup.coaching)
     await callback.answer()
+
+# ─── Coaching principal ──────────────────────────────────────────
 
 @router.message(ProfileSetup.coaching)
 async def handle_coaching_message(message: Message, state: FSMContext):
@@ -131,20 +216,20 @@ async def handle_coaching_message(message: Message, state: FSMContext):
 
     thinking_msg = await message.answer(TEXTS["thinking"][lang])
 
-    profile = user_profiles.get(user_id, {"language": lang})
-    history = conversation_histories.get(user_id, [])
+    user = await get_user(user_id)
+    if user:
+        lang = user["language"]
+
+    history = await get_conversation_history(user_id)
 
     response = await get_coaching_response(
-        message.text,
-        lang,
-        profile,
-        history
+        message.text, lang, user or {}, history
     )
 
-    # Mettre à jour l'historique (garder les 10 derniers échanges)
-    history.append({"role": "user", "content": message.text})
-    history.append({"role": "assistant", "content": response})
-    conversation_histories[user_id] = history[-20:]
+    # Sauvegarder en base
+    await save_message(user_id, "user", message.text)
+    await save_message(user_id, "assistant", response)
+    await update_xp(user_id, 5)  # +5 XP par message
 
     await thinking_msg.delete()
     await message.answer(response)
