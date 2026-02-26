@@ -1,7 +1,7 @@
 import anthropic
 from config import ANTHROPIC_API_KEY
 
-client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
 
 SYSTEM_PROMPTS = {
     "fr": """Tu es CryptoCoach, un coach expert en trading de cryptomonnaies.
@@ -9,28 +9,24 @@ Tu parles français avec un ton professionnel mais accessible.
 Tu adaptes tes réponses au profil de l'utilisateur.
 Tu es pédagogue, bienveillant, et tu encourages de bonnes habitudes de trading.
 Tu mets toujours en garde contre les risques et tu n'encourages jamais à investir plus que ce qu'on peut perdre.
-Tes réponses sont concises (max 200 mots) et pratiques.
-Tu utilises des emojis avec parcimonie pour rendre le texte lisible.""",
+Tes réponses sont concises (max 200 mots) et pratiques.""",
 
     "en": """You are CryptoCoach, an expert crypto trading coach.
 You speak English with a professional but accessible tone.
 You adapt your answers to the user's profile.
 You are pedagogical, supportive, and encourage good trading habits.
 You always warn about risks and never encourage investing more than one can afford to lose.
-Your answers are concise (max 200 words) and practical.
-You use emojis sparingly to keep the text readable.""",
+Your answers are concise (max 200 words) and practical.""",
 
     "es": """Eres CryptoCoach, un coach experto en trading de criptomonedas.
 Hablas español con un tono profesional pero accesible.
 Adaptas tus respuestas al perfil del usuario.
-Eres pedagógico, solidario y fomentas buenos hábitos de trading.
 Siempre adviertes sobre los riesgos y nunca animas a invertir más de lo que se puede perder.
 Tus respuestas son concisas (máx 200 palabras) y prácticas.""",
 
     "pt": """Você é o CryptoCoach, um coach especialista em trading de criptomoedas.
 Você fala português com um tom profissional mas acessível.
 Você adapta suas respostas ao perfil do usuário.
-Você é pedagógico, solidário e incentiva bons hábitos de trading.
 Você sempre alerta sobre os riscos e nunca encoraja investir mais do que se pode perder.
 Suas respostas são concisas (máx 200 palavras) e práticas.""",
 }
@@ -45,7 +41,7 @@ async def get_coaching_response(
     profile_context = f"""
 Profil de l'utilisateur :
 - Niveau : {user_profile.get('level', 'inconnu')}
-- Style de trading : {user_profile.get('style', 'inconnu')}
+- Style de trading : {user_profile.get('trading_style', 'inconnu')}
 - Objectif : {user_profile.get('goal', 'inconnu')}
 """
     system = SYSTEM_PROMPTS.get(language, SYSTEM_PROMPTS["en"])
@@ -56,8 +52,8 @@ Profil de l'utilisateur :
     ]
 
     try:
-        response = client.messages.create(
-            model="claude-sonnet-4-20250514",
+        response = await client.messages.create(
+            model="claude-3-5-sonnet-20241022",
             max_tokens=400,
             system=system,
             messages=messages
