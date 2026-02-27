@@ -4,6 +4,10 @@ from datetime import datetime, timezone
 SUPPORTED_EXCHANGES = {
     "binance": "Binance",
     "bybit": "Bybit",
+    "kucoin": "KuCoin",
+    "okx": "OKX",
+    "kraken": "Kraken",
+    "bitget": "Bitget",
 }
 
 async def test_connection(exchange_id: str, api_key: str, api_secret: str) -> dict:
@@ -50,8 +54,10 @@ async def fetch_recent_trades(
         all_trades = []
 
         common_pairs = [
-            "BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT",
-            "XRP/USDT", "ADA/USDT", "DOGE/USDT", "MATIC/USDT"
+    "BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT",
+    "XRP/USDT", "ADA/USDT", "DOGE/USDT", "MATIC/USDT",
+    "BTC/USD", "ETH/USD",  # Pour Kraken qui utilise USD
+    "BTC/USDC", "ETH/USDC"  # Paires USDC de plus en plus communes
         ]
 
         for pair in common_pairs:

@@ -12,12 +12,14 @@ logging.basicConfig(level=logging.INFO)
 
 async def main():
     await init_db()
-
+    
     bot = Bot(token=TELEGRAM_TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
-    dp.include_router(main_router)
+    
+    # Exchange router EN PREMIER pour intercepter les commandes
     dp.include_router(exchange_router)
-
+    dp.include_router(main_router)
+    
     print("🚀 CryptoCoach Bot démarré !")
     await dp.start_polling(bot)
 
