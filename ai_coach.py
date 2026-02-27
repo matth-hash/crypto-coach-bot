@@ -53,13 +53,14 @@ Profil de l'utilisateur :
 
     try:
         response = await client.messages.create(
-            model="claude-3-opus-20240229",
+            model="claude-sonnet-4-20250514",
             max_tokens=400,
             system=system,
             messages=messages
         )
         return response.content[0].text
     except Exception as e:
+        print(f"ERREUR ANTHROPIC COMPLÈTE : {type(e).__name__}: {e}")
         error_messages = {
             "fr": "❌ Une erreur s'est produite. Réessaie dans un moment.",
             "en": "❌ An error occurred. Please try again in a moment.",
