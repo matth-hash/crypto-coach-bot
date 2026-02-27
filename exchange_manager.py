@@ -7,7 +7,6 @@ SUPPORTED_EXCHANGES = {
     "kucoin": "KuCoin",
     "okx": "OKX",
     "kraken": "Kraken",
-    "bitget": "Bitget",
 }
 
 async def test_connection(exchange_id: str, api_key: str, api_secret: str) -> dict:
