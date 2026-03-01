@@ -22,14 +22,255 @@ class ExchangeSetup(StatesGroup):
     waiting_api_key = State()
     waiting_api_secret = State()
 
+# ─── Instructions par exchange et par langue ─────────────────────
+
+EXCHANGE_API_INSTRUCTIONS = {
+    "binance": {
+        "fr": (
+            "📖 *Comment créer tes clés API Binance :*\n\n"
+            "1️⃣ Va sur binance.com → connecte-toi\n"
+            "2️⃣ Clique sur ton profil (en haut à droite)\n"
+            "3️⃣ Sélectionne *Gestion des API*\n"
+            "4️⃣ Clique sur *Créer une API*\n"
+            "5️⃣ Choisis *Clé API générée par le système*\n"
+            "6️⃣ Donne un nom (ex: CryptoCoach)\n"
+            "7️⃣ Active UNIQUEMENT ✅ *Lire*\n"
+            "❌ Ne coche JAMAIS Retrait ou Trading\n\n"
+            "🔗 Lien direct : myaccount.binance.com/fr/api-management"
+        ),
+        "en": (
+            "📖 *How to create your Binance API keys:*\n\n"
+            "1️⃣ Go to binance.com → log in\n"
+            "2️⃣ Click your profile (top right)\n"
+            "3️⃣ Select *API Management*\n"
+            "4️⃣ Click *Create API*\n"
+            "5️⃣ Choose *System generated API key*\n"
+            "6️⃣ Give it a name (e.g. CryptoCoach)\n"
+            "7️⃣ Enable ONLY ✅ *Read*\n"
+            "❌ NEVER enable Withdrawal or Trading\n\n"
+            "🔗 Direct link: myaccount.binance.com/en/api-management"
+        ),
+        "es": (
+            "📖 *Cómo crear tus claves API de Binance:*\n\n"
+            "1️⃣ Ve a binance.com → inicia sesión\n"
+            "2️⃣ Haz clic en tu perfil (arriba a la derecha)\n"
+            "3️⃣ Selecciona *Gestión de API*\n"
+            "4️⃣ Haz clic en *Crear API*\n"
+            "5️⃣ Elige *Clave API generada por el sistema*\n"
+            "6️⃣ Dale un nombre (ej: CryptoCoach)\n"
+            "7️⃣ Activa SOLO ✅ *Leer*\n"
+            "❌ NUNCA actives Retiro o Trading\n\n"
+            "🔗 Enlace directo: myaccount.binance.com/es/api-management"
+        ),
+        "pt": (
+            "📖 *Como criar suas chaves API da Binance:*\n\n"
+            "1️⃣ Vá para binance.com → faça login\n"
+            "2️⃣ Clique no seu perfil (canto superior direito)\n"
+            "3️⃣ Selecione *Gerenciamento de API*\n"
+            "4️⃣ Clique em *Criar API*\n"
+            "5️⃣ Escolha *Chave API gerada pelo sistema*\n"
+            "6️⃣ Dê um nome (ex: CryptoCoach)\n"
+            "7️⃣ Ative APENAS ✅ *Leitura*\n"
+            "❌ NUNCA ative Saque ou Trading\n\n"
+            "🔗 Link direto: myaccount.binance.com/pt/api-management"
+        ),
+    },
+    "bybit": {
+        "fr": (
+            "📖 *Comment créer tes clés API Bybit :*\n\n"
+            "1️⃣ Va sur bybit.com → connecte-toi\n"
+            "2️⃣ Clique sur ton profil → *Paramètres du compte*\n"
+            "3️⃣ Sélectionne *API* dans le menu\n"
+            "4️⃣ Clique sur *Créer une nouvelle clé*\n"
+            "5️⃣ Choisis *Clé API*\n"
+            "6️⃣ Donne un nom (ex: CryptoCoach)\n"
+            "7️⃣ Coche UNIQUEMENT ✅ *Lire*\n"
+            "❌ Ne coche JAMAIS Retrait ou Trade\n\n"
+            "🔗 Lien direct : bybit.com/app/user/api-management"
+        ),
+        "en": (
+            "📖 *How to create your Bybit API keys:*\n\n"
+            "1️⃣ Go to bybit.com → log in\n"
+            "2️⃣ Click your profile → *Account Settings*\n"
+            "3️⃣ Select *API* in the menu\n"
+            "4️⃣ Click *Create New Key*\n"
+            "5️⃣ Choose *API Key*\n"
+            "6️⃣ Give it a name (e.g. CryptoCoach)\n"
+            "7️⃣ Check ONLY ✅ *Read*\n"
+            "❌ NEVER enable Withdrawal or Trade\n\n"
+            "🔗 Direct link: bybit.com/app/user/api-management"
+        ),
+        "es": (
+            "📖 *Cómo crear tus claves API de Bybit:*\n\n"
+            "1️⃣ Ve a bybit.com → inicia sesión\n"
+            "2️⃣ Haz clic en tu perfil → *Configuración de cuenta*\n"
+            "3️⃣ Selecciona *API* en el menú\n"
+            "4️⃣ Haz clic en *Crear nueva clave*\n"
+            "5️⃣ Elige *Clave API*\n"
+            "6️⃣ Dale un nombre (ej: CryptoCoach)\n"
+            "7️⃣ Marca SOLO ✅ *Leer*\n"
+            "❌ NUNCA actives Retiro o Trade\n\n"
+            "🔗 Enlace directo: bybit.com/app/user/api-management"
+        ),
+        "pt": (
+            "📖 *Como criar suas chaves API da Bybit:*\n\n"
+            "1️⃣ Vá para bybit.com → faça login\n"
+            "2️⃣ Clique no seu perfil → *Configurações da conta*\n"
+            "3️⃣ Selecione *API* no menu\n"
+            "4️⃣ Clique em *Criar nova chave*\n"
+            "5️⃣ Escolha *Chave API*\n"
+            "6️⃣ Dê um nome (ex: CryptoCoach)\n"
+            "7️⃣ Marque APENAS ✅ *Leitura*\n"
+            "❌ NUNCA ative Saque ou Trade\n\n"
+            "🔗 Link direto: bybit.com/app/user/api-management"
+        ),
+    },
+    "kucoin": {
+        "fr": (
+            "📖 *Comment créer tes clés API KuCoin :*\n\n"
+            "1️⃣ Va sur kucoin.com → connecte-toi\n"
+            "2️⃣ Clique sur ton profil → *Gestion des API*\n"
+            "3️⃣ Clique sur *Créer une API*\n"
+            "4️⃣ Donne un nom et un mot de passe API\n"
+            "5️⃣ Coche UNIQUEMENT ✅ *Général* (lecture seule)\n"
+            "❌ Ne coche JAMAIS Trade ou Transfert\n\n"
+            "🔗 Lien direct : kucoin.com/account/api"
+        ),
+        "en": (
+            "📖 *How to create your KuCoin API keys:*\n\n"
+            "1️⃣ Go to kucoin.com → log in\n"
+            "2️⃣ Click your profile → *API Management*\n"
+            "3️⃣ Click *Create API*\n"
+            "4️⃣ Set a name and API passphrase\n"
+            "5️⃣ Check ONLY ✅ *General* (read only)\n"
+            "❌ NEVER enable Trade or Transfer\n\n"
+            "🔗 Direct link: kucoin.com/account/api"
+        ),
+        "es": (
+            "📖 *Cómo crear tus claves API de KuCoin:*\n\n"
+            "1️⃣ Ve a kucoin.com → inicia sesión\n"
+            "2️⃣ Haz clic en tu perfil → *Gestión de API*\n"
+            "3️⃣ Haz clic en *Crear API*\n"
+            "4️⃣ Establece un nombre y contraseña API\n"
+            "5️⃣ Marca SOLO ✅ *General* (solo lectura)\n"
+            "❌ NUNCA actives Trade o Transferencia\n\n"
+            "🔗 Enlace directo: kucoin.com/account/api"
+        ),
+        "pt": (
+            "📖 *Como criar suas chaves API da KuCoin:*\n\n"
+            "1️⃣ Vá para kucoin.com → faça login\n"
+            "2️⃣ Clique no seu perfil → *Gerenciamento de API*\n"
+            "3️⃣ Clique em *Criar API*\n"
+            "4️⃣ Defina um nome e senha API\n"
+            "5️⃣ Marque APENAS ✅ *Geral* (somente leitura)\n"
+            "❌ NUNCA ative Trade ou Transferência\n\n"
+            "🔗 Link direto: kucoin.com/account/api"
+        ),
+    },
+    "okx": {
+        "fr": (
+            "📖 *Comment créer tes clés API OKX :*\n\n"
+            "1️⃣ Va sur okx.com → connecte-toi\n"
+            "2️⃣ Clique sur ton profil → *Paramètres*\n"
+            "3️⃣ Sélectionne *API*\n"
+            "4️⃣ Clique sur *Créer une clé API V5*\n"
+            "5️⃣ Donne un nom et une passphrase\n"
+            "6️⃣ Sélectionne UNIQUEMENT ✅ *Lecture*\n"
+            "❌ Ne coche JAMAIS Trade ou Retrait\n\n"
+            "🔗 Lien direct : okx.com/account/my-api"
+        ),
+        "en": (
+            "📖 *How to create your OKX API keys:*\n\n"
+            "1️⃣ Go to okx.com → log in\n"
+            "2️⃣ Click your profile → *Settings*\n"
+            "3️⃣ Select *API*\n"
+            "4️⃣ Click *Create V5 API Key*\n"
+            "5️⃣ Set a name and passphrase\n"
+            "6️⃣ Select ONLY ✅ *Read*\n"
+            "❌ NEVER enable Trade or Withdrawal\n\n"
+            "🔗 Direct link: okx.com/account/my-api"
+        ),
+        "es": (
+            "📖 *Cómo crear tus claves API de OKX:*\n\n"
+            "1️⃣ Ve a okx.com → inicia sesión\n"
+            "2️⃣ Haz clic en tu perfil → *Configuración*\n"
+            "3️⃣ Selecciona *API*\n"
+            "4️⃣ Haz clic en *Crear clave API V5*\n"
+            "5️⃣ Establece un nombre y contraseña\n"
+            "6️⃣ Selecciona SOLO ✅ *Lectura*\n"
+            "❌ NUNCA actives Trade o Retiro\n\n"
+            "🔗 Enlace directo: okx.com/account/my-api"
+        ),
+        "pt": (
+            "📖 *Como criar suas chaves API da OKX:*\n\n"
+            "1️⃣ Vá para okx.com → faça login\n"
+            "2️⃣ Clique no seu perfil → *Configurações*\n"
+            "3️⃣ Selecione *API*\n"
+            "4️⃣ Clique em *Criar chave API V5*\n"
+            "5️⃣ Defina um nome e senha\n"
+            "6️⃣ Selecione APENAS ✅ *Leitura*\n"
+            "❌ NUNCA ative Trade ou Saque\n\n"
+            "🔗 Link direto: okx.com/account/my-api"
+        ),
+    },
+    "kraken": {
+        "fr": (
+            "📖 *Comment créer tes clés API Kraken :*\n\n"
+            "1️⃣ Va sur kraken.com → connecte-toi\n"
+            "2️⃣ Clique sur ton nom → *Sécurité*\n"
+            "3️⃣ Sélectionne *API*\n"
+            "4️⃣ Clique sur *Ajouter une clé*\n"
+            "5️⃣ Donne un nom (ex: CryptoCoach)\n"
+            "6️⃣ Coche UNIQUEMENT ✅ *Accès aux données du compte*\n"
+            "❌ Ne coche JAMAIS Trading ou Transfert\n\n"
+            "🔗 Lien direct : kraken.com/u/security/api"
+        ),
+        "en": (
+            "📖 *How to create your Kraken API keys:*\n\n"
+            "1️⃣ Go to kraken.com → log in\n"
+            "2️⃣ Click your name → *Security*\n"
+            "3️⃣ Select *API*\n"
+            "4️⃣ Click *Add key*\n"
+            "5️⃣ Give it a name (e.g. CryptoCoach)\n"
+            "6️⃣ Check ONLY ✅ *Query account data*\n"
+            "❌ NEVER enable Trading or Transfer\n\n"
+            "🔗 Direct link: kraken.com/u/security/api"
+        ),
+        "es": (
+            "📖 *Cómo crear tus claves API de Kraken:*\n\n"
+            "1️⃣ Ve a kraken.com → inicia sesión\n"
+            "2️⃣ Haz clic en tu nombre → *Seguridad*\n"
+            "3️⃣ Selecciona *API*\n"
+            "4️⃣ Haz clic en *Agregar clave*\n"
+            "5️⃣ Dale un nombre (ej: CryptoCoach)\n"
+            "6️⃣ Marca SOLO ✅ *Consultar datos de cuenta*\n"
+            "❌ NUNCA actives Trading o Transferencia\n\n"
+            "🔗 Enlace directo: kraken.com/u/security/api"
+        ),
+        "pt": (
+            "📖 *Como criar suas chaves API da Kraken:*\n\n"
+            "1️⃣ Vá para kraken.com → faça login\n"
+            "2️⃣ Clique no seu nome → *Segurança*\n"
+            "3️⃣ Selecione *API*\n"
+            "4️⃣ Clique em *Adicionar chave*\n"
+            "5️⃣ Dê um nome (ex: CryptoCoach)\n"
+            "6️⃣ Marque APENAS ✅ *Consultar dados da conta*\n"
+            "❌ NUNCA ative Trading ou Transferência\n\n"
+            "🔗 Link direto: kraken.com/u/security/api"
+        ),
+    },
+}
+
+# ─── /exchange ───────────────────────────────────────────────────
+
 @router.message(Command("exchange"))
 async def cmd_exchange(message: Message, state: FSMContext):
     user_id = message.from_user.id
     user = await get_user(user_id)
     lang = user["language"] if user else "en"
-
+    
     connected = await get_user_exchanges(user_id)
-
+    
     builder = InlineKeyboardBuilder()
     for ex_id, ex_name in SUPPORTED_EXCHANGES.items():
         status = "✅" if ex_id in connected else "➕"
@@ -38,14 +279,14 @@ async def cmd_exchange(message: Message, state: FSMContext):
             callback_data=f"exchange_select:{ex_id}"
         )
     builder.adjust(1)
-
+    
     titles = {
         "fr": "🔗 *Connexion Exchange*\n\nChoisis un exchange à connecter :",
         "en": "🔗 *Exchange Connection*\n\nChoose an exchange to connect:",
         "es": "🔗 *Conexión Exchange*\n\nElige un exchange para conectar:",
         "pt": "🔗 *Conexão Exchange*\n\nEscolha uma exchange para conectar:",
     }
-
+    
     await message.answer(
         titles.get(lang, titles["en"]),
         reply_markup=builder.as_markup(),
@@ -58,17 +299,17 @@ async def process_exchange_select(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
     user = await get_user(user_id)
     lang = user["language"] if user else "en"
-
+    
     await state.update_data(language=lang, exchange_id=exchange_id)
     existing = await get_exchange_connection(user_id, exchange_id)
-
+    
     if existing:
         builder = InlineKeyboardBuilder()
         builder.button(text="🔄 Reconnecter", callback_data=f"exchange_reconnect:{exchange_id}")
         builder.button(text="🗑️ Déconnecter", callback_data=f"exchange_disconnect:{exchange_id}")
         builder.button(text="📊 Voir mes trades", callback_data=f"exchange_trades:{exchange_id}")
         builder.adjust(1)
-
+        
         already_texts = {
             "fr": f"✅ *{SUPPORTED_EXCHANGES[exchange_id]}* est déjà connecté.\nQue veux-tu faire ?",
             "en": f"✅ *{SUPPORTED_EXCHANGES[exchange_id]}* is already connected.\nWhat do you want to do?",
@@ -82,46 +323,30 @@ async def process_exchange_select(callback: CallbackQuery, state: FSMContext):
         )
         await callback.answer()
         return
-
+    
     await start_api_key_flow(callback.message, state, exchange_id, lang)
     await callback.answer()
 
-async def start_api_key_flow(message, state, exchange_id, lang):
-    security_texts = {
-        "fr": (
-            f"🔐 *Connexion {SUPPORTED_EXCHANGES[exchange_id]}*\n\n"
-            "⚠️ *Sécurité importante :*\n"
-            "• Crée des clés API en *lecture seule* uniquement\n"
-            "• N'active jamais la permission de retrait\n"
-            "• Tes clés sont chiffrées dans notre base\n\n"
-            "Envoie maintenant ta *clé API* :"
-        ),
-        "en": (
-            f"🔐 *{SUPPORTED_EXCHANGES[exchange_id]} Connection*\n\n"
-            "⚠️ *Important security:*\n"
-            "• Create API keys with *read only* permissions\n"
-            "• Never enable withdrawal permission\n"
-            "• Your keys are encrypted in our database\n\n"
-            "Now send your *API Key* :"
-        ),
-        "es": (
-            f"🔐 *Conexión {SUPPORTED_EXCHANGES[exchange_id]}*\n\n"
-            "⚠️ *Seguridad importante:*\n"
-            "• Crea claves API de *solo lectura*\n"
-            "• Nunca actives el permiso de retiro\n"
-            "• Tus claves están cifradas\n\n"
-            "Envía ahora tu *clave API* :"
-        ),
-        "pt": (
-            f"🔐 *Conexão {SUPPORTED_EXCHANGES[exchange_id]}*\n\n"
-            "⚠️ *Segurança importante:*\n"
-            "• Crie chaves API de *somente leitura*\n"
-            "• Nunca ative a permissão de saque\n"
-            "• Suas chaves são criptografadas\n\n"
-            "Envie agora sua *chave API* :"
-        ),
-    }
+# ─── Flux de connexion ───────────────────────────────────────────
 
+async def start_api_key_flow(message, state, exchange_id, lang):
+    """Lance le flux avec instructions puis demande la clé API."""
+    
+    # Instructions spécifiques à l'exchange
+    instructions = EXCHANGE_API_INSTRUCTIONS.get(exchange_id, {})
+    instruction_text = instructions.get(lang, instructions.get("en", ""))
+    
+    if instruction_text:
+        await message.answer(instruction_text, parse_mode="Markdown")
+    
+    # Demande de clé
+    security_texts = {
+        "fr": "✅ *Clés prêtes ?*\n\nEnvoie maintenant ta *clé API* :",
+        "en": "✅ *Keys ready?*\n\nNow send your *API Key* :",
+        "es": "✅ *¿Claves listas?*\n\nEnvía ahora tu *clave API* :",
+        "pt": "✅ *Chaves prontas?*\n\nEnvie agora sua *chave API* :",
+    }
+    
     await message.answer(
         security_texts.get(lang, security_texts["en"]),
         parse_mode="Markdown"
@@ -133,17 +358,17 @@ async def process_api_key(message: Message, state: FSMContext):
     api_key = message.text.strip()
     await state.update_data(api_key=api_key)
     await message.delete()
-
+    
     data = await state.get_data()
     lang = data.get("language", "en")
-
+    
     secret_texts = {
         "fr": "✅ Clé API reçue (message supprimé pour sécurité).\n\nEnvoie maintenant ton *Secret API* :",
         "en": "✅ API Key received (message deleted for security).\n\nNow send your *API Secret* :",
         "es": "✅ Clave API recibida (mensaje eliminado).\n\nEnvía ahora tu *Secret API* :",
         "pt": "✅ Chave API recebida (mensagem apagada).\n\nEnvie agora seu *Secret API* :",
     }
-
+    
     await message.answer(
         secret_texts.get(lang, secret_texts["en"]),
         parse_mode="Markdown"
@@ -154,13 +379,13 @@ async def process_api_key(message: Message, state: FSMContext):
 async def process_api_secret(message: Message, state: FSMContext):
     api_secret = message.text.strip()
     await message.delete()
-
+    
     data = await state.get_data()
     lang = data.get("language", "en")
     exchange_id = data.get("exchange_id")
     api_key = data.get("api_key")
     user_id = message.from_user.id
-
+    
     testing_texts = {
         "fr": "🔄 Test de connexion en cours...",
         "en": "🔄 Testing connection...",
@@ -169,11 +394,11 @@ async def process_api_secret(message: Message, state: FSMContext):
     }
     status_msg = await message.answer(testing_texts.get(lang, testing_texts["en"]))
     result = await test_connection(exchange_id, api_key, api_secret)
-
+    
     if result["success"]:
         await save_exchange_connection(user_id, exchange_id, api_key, api_secret)
         await state.clear()
-
+        
         success_texts = {
             "fr": (
                 f"✅ *{SUPPORTED_EXCHANGES[exchange_id]} connecté !*\n\n"
@@ -210,24 +435,26 @@ async def process_api_secret(message: Message, state: FSMContext):
         await status_msg.edit_text(error_texts.get(lang, error_texts["en"]))
         await state.clear()
 
+# ─── /trades ─────────────────────────────────────────────────────
+
 @router.message(Command("trades"))
 async def cmd_trades(message: Message):
     user_id = message.from_user.id
     user = await get_user(user_id)
     lang = user["language"] if user else "en"
-
+    
     exchanges = await get_user_exchanges(user_id)
-
+    
     if not exchanges:
         no_exchange_texts = {
-            "fr": "❌ Aucun exchange connecté. Utilise /exchange pour connecter Binance ou Bybit.",
-            "en": "❌ No exchange connected. Use /exchange to connect Binance or Bybit.",
+            "fr": "❌ Aucun exchange connecté. Utilise /exchange pour connecter un exchange.",
+            "en": "❌ No exchange connected. Use /exchange to connect one.",
             "es": "❌ Ningún exchange conectado. Usa /exchange para conectar.",
             "pt": "❌ Nenhuma exchange conectada. Use /exchange para conectar.",
         }
         await message.answer(no_exchange_texts.get(lang, no_exchange_texts["en"]))
         return
-
+    
     loading_texts = {
         "fr": "📊 Récupération de tes trades...",
         "en": "📊 Fetching your trades...",
@@ -235,11 +462,11 @@ async def cmd_trades(message: Message):
         "pt": "📊 Buscando seus trades...",
     }
     status_msg = await message.answer(loading_texts.get(lang, loading_texts["en"]))
-
+    
     exchange_id = exchanges[0]
     conn = await get_exchange_connection(user_id, exchange_id)
     trades = await fetch_recent_trades(exchange_id, conn["api_key"], conn["api_secret"])
-
+    
     if not trades:
         no_trades_texts = {
             "fr": "📭 Aucun trade récent trouvé.",

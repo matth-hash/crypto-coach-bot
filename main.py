@@ -7,6 +7,7 @@ from config import TELEGRAM_TOKEN
 from bot.handlers import router as main_router
 from bot.exchange_handlers import router as exchange_router
 from bot.psychology_handlers import router as psychology_router
+from bot.gamification_handlers import router as gamification_router
 from database import init_db
 
 logging.basicConfig(level=logging.INFO)
@@ -19,6 +20,7 @@ async def main():
 
     dp.include_router(exchange_router)
     dp.include_router(psychology_router)
+    dp.include_router(gamification_router)
     dp.include_router(main_router)
 
     print("🚀 CryptoCoach Bot démarré !")

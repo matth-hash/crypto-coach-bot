@@ -229,7 +229,16 @@ async def handle_coaching_message(message: Message, state: FSMContext):
     # Sauvegarder en base
     await save_message(user_id, "user", message.text)
     await save_message(user_id, "assistant", response)
-    await update_xp(user_id, 5)  # +5 XP par message
+    await update_xp(user_id, 5)  # +5 XP par message# Streak et badge premier message
+    streak, badge_msg = await update_streak(user_id, lang)
+    if badge_msg:
+        await message.answer(badge_msg, parse_mode="Markdown")
+
+    # Badge premier message
+    from gamification import check_and_award_badge
+    first_msg_badge = await check_and_award_badge(user_id, "first_message", lang)
+    if first_msg_badge:
+        await message.answer(first_msg_badge, parse_mode="Markdown")
 
     await thinking_msg.delete()
     await message.answer(response)
