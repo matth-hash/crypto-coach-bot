@@ -257,241 +257,242 @@ async def handle_coaching_message(message: Message, state: FSMContext):
     await message.answer(response)
 
 # ─── /exchange ───────────────────────────────────────────────────
-    "binance": {
-        "fr": (
-            "📖 *Comment créer tes clés API Binance :*\n\n"
-            "1️⃣ Va sur binance.com → connecte-toi\n"
-            "2️⃣ Clique sur ton profil (en haut à droite)\n"
-            "3️⃣ Sélectionne *Gestion des API*\n"
-            "4️⃣ Clique sur *Créer une API*\n"
-            "5️⃣ Choisis *Clé API générée par le système*\n"
-            "6️⃣ Donne un nom (ex: CryptoCoach)\n"
-            "7️⃣ Active UNIQUEMENT ✅ *Lire*\n"
-            "❌ Ne coche JAMAIS Retrait ou Trading\n\n"
-            "🔗 Lien direct : myaccount.binance.com/fr/api-management"
-        ),
-        "en": (
-            "📖 *How to create your Binance API keys:*\n\n"
-            "1️⃣ Go to binance.com → log in\n"
-            "2️⃣ Click your profile (top right)\n"
-            "3️⃣ Select *API Management*\n"
-            "4️⃣ Click *Create API*\n"
-            "5️⃣ Choose *System generated API key*\n"
-            "6️⃣ Give it a name (e.g. CryptoCoach)\n"
-            "7️⃣ Enable ONLY ✅ *Read*\n"
-            "❌ NEVER enable Withdrawal or Trading\n\n"
-            "🔗 Direct link: myaccount.binance.com/en/api-management"
-        ),
-        "es": (
-            "📖 *Cómo crear tus claves API de Binance:*\n\n"
-            "1️⃣ Ve a binance.com → inicia sesión\n"
-            "2️⃣ Haz clic en tu perfil (arriba a la derecha)\n"
-            "3️⃣ Selecciona *Gestión de API*\n"
-            "4️⃣ Haz clic en *Crear API*\n"
-            "5️⃣ Elige *Clave API generada por el sistema*\n"
-            "6️⃣ Dale un nombre (ej: CryptoCoach)\n"
-            "7️⃣ Activa SOLO ✅ *Leer*\n"
-            "❌ NUNCA actives Retiro o Trading\n\n"
-            "🔗 Enlace directo: myaccount.binance.com/es/api-management"
-        ),
-        "pt": (
-            "📖 *Como criar suas chaves API da Binance:*\n\n"
-            "1️⃣ Vá para binance.com → faça login\n"
-            "2️⃣ Clique no seu perfil (canto superior direito)\n"
-            "3️⃣ Selecione *Gerenciamento de API*\n"
-            "4️⃣ Clique em *Criar API*\n"
-            "5️⃣ Escolha *Chave API gerada pelo sistema*\n"
-            "6️⃣ Dê um nome (ex: CryptoCoach)\n"
-            "7️⃣ Ative APENAS ✅ *Leitura*\n"
-            "❌ NUNCA ative Saque ou Trading\n\n"
-            "🔗 Link direto: myaccount.binance.com/pt/api-management"
-        ),
-    },
-    "bybit": {
-        "fr": (
-            "📖 *Comment créer tes clés API Bybit :*\n\n"
-            "1️⃣ Va sur bybit.com → connecte-toi\n"
-            "2️⃣ Clique sur ton profil → *Paramètres du compte*\n"
-            "3️⃣ Sélectionne *API* dans le menu\n"
-            "4️⃣ Clique sur *Créer une nouvelle clé*\n"
-            "5️⃣ Choisis *Clé API*\n"
-            "6️⃣ Donne un nom (ex: CryptoCoach)\n"
-            "7️⃣ Coche UNIQUEMENT ✅ *Lire*\n"
-            "❌ Ne coche JAMAIS Retrait ou Trade\n\n"
-            "🔗 Lien direct : bybit.com/app/user/api-management"
-        ),
-        "en": (
-            "📖 *How to create your Bybit API keys:*\n\n"
-            "1️⃣ Go to bybit.com → log in\n"
-            "2️⃣ Click your profile → *Account Settings*\n"
-            "3️⃣ Select *API* in the menu\n"
-            "4️⃣ Click *Create New Key*\n"
-            "5️⃣ Choose *API Key*\n"
-            "6️⃣ Give it a name (e.g. CryptoCoach)\n"
-            "7️⃣ Check ONLY ✅ *Read*\n"
-            "❌ NEVER enable Withdrawal or Trade\n\n"
-            "🔗 Direct link: bybit.com/app/user/api-management"
-        ),
-        "es": (
-            "📖 *Cómo crear tus claves API de Bybit:*\n\n"
-            "1️⃣ Ve a bybit.com → inicia sesión\n"
-            "2️⃣ Haz clic en tu perfil → *Configuración de cuenta*\n"
-            "3️⃣ Selecciona *API* en el menú\n"
-            "4️⃣ Haz clic en *Crear nueva clave*\n"
-            "5️⃣ Elige *Clave API*\n"
-            "6️⃣ Dale un nombre (ej: CryptoCoach)\n"
-            "7️⃣ Marca SOLO ✅ *Leer*\n"
-            "❌ NUNCA actives Retiro o Trade\n\n"
-            "🔗 Enlace directo: bybit.com/app/user/api-management"
-        ),
-        "pt": (
-            "📖 *Como criar suas chaves API da Bybit:*\n\n"
-            "1️⃣ Vá para bybit.com → faça login\n"
-            "2️⃣ Clique no seu perfil → *Configurações da conta*\n"
-            "3️⃣ Selecione *API* no menu\n"
-            "4️⃣ Clique em *Criar nova chave*\n"
-            "5️⃣ Escolha *Chave API*\n"
-            "6️⃣ Dê um nome (ex: CryptoCoach)\n"
-            "7️⃣ Marque APENAS ✅ *Leitura*\n"
-            "❌ NUNCA ative Saque ou Trade\n\n"
-            "🔗 Link direto: bybit.com/app/user/api-management"
-        ),
-    },
-    "kucoin": {
-        "fr": (
-            "📖 *Comment créer tes clés API KuCoin :*\n\n"
-            "1️⃣ Va sur kucoin.com → connecte-toi\n"
-            "2️⃣ Clique sur ton profil → *Gestion des API*\n"
-            "3️⃣ Clique sur *Créer une API*\n"
-            "4️⃣ Donne un nom et un mot de passe API\n"
-            "5️⃣ Coche UNIQUEMENT ✅ *Général* (lecture seule)\n"
-            "❌ Ne coche JAMAIS Trade ou Transfert\n\n"
-            "🔗 Lien direct : kucoin.com/account/api"
-        ),
-        "en": (
-            "📖 *How to create your KuCoin API keys:*\n\n"
-            "1️⃣ Go to kucoin.com → log in\n"
-            "2️⃣ Click your profile → *API Management*\n"
-            "3️⃣ Click *Create API*\n"
-            "4️⃣ Set a name and API passphrase\n"
-            "5️⃣ Check ONLY ✅ *General* (read only)\n"
-            "❌ NEVER enable Trade or Transfer\n\n"
-            "🔗 Direct link: kucoin.com/account/api"
-        ),
-        "es": (
-            "📖 *Cómo crear tus claves API de KuCoin:*\n\n"
-            "1️⃣ Ve a kucoin.com → inicia sesión\n"
-            "2️⃣ Haz clic en tu perfil → *Gestión de API*\n"
-            "3️⃣ Haz clic en *Crear API*\n"
-            "4️⃣ Establece un nombre y contraseña API\n"
-            "5️⃣ Marca SOLO ✅ *General* (solo lectura)\n"
-            "❌ NUNCA actives Trade o Transferencia\n\n"
-            "🔗 Enlace directo: kucoin.com/account/api"
-        ),
-        "pt": (
-            "📖 *Como criar suas chaves API da KuCoin:*\n\n"
-            "1️⃣ Vá para kucoin.com → faça login\n"
-            "2️⃣ Clique no seu perfil → *Gerenciamento de API*\n"
-            "3️⃣ Clique em *Criar API*\n"
-            "4️⃣ Defina um nome e senha API\n"
-            "5️⃣ Marque APENAS ✅ *Geral* (somente leitura)\n"
-            "❌ NUNCA ative Trade ou Transferência\n\n"
-            "🔗 Link direto: kucoin.com/account/api"
-        ),
-    },
-    "okx": {
-        "fr": (
-            "📖 *Comment créer tes clés API OKX :*\n\n"
-            "1️⃣ Va sur okx.com → connecte-toi\n"
-            "2️⃣ Clique sur ton profil → *Paramètres*\n"
-            "3️⃣ Sélectionne *API*\n"
-            "4️⃣ Clique sur *Créer une clé API V5*\n"
-            "5️⃣ Donne un nom et une passphrase\n"
-            "6️⃣ Sélectionne UNIQUEMENT ✅ *Lecture*\n"
-            "❌ Ne coche JAMAIS Trade ou Retrait\n\n"
-            "🔗 Lien direct : okx.com/account/my-api"
-        ),
-        "en": (
-            "📖 *How to create your OKX API keys:*\n\n"
-            "1️⃣ Go to okx.com → log in\n"
-            "2️⃣ Click your profile → *Settings*\n"
-            "3️⃣ Select *API*\n"
-            "4️⃣ Click *Create V5 API Key*\n"
-            "5️⃣ Set a name and passphrase\n"
-            "6️⃣ Select ONLY ✅ *Read*\n"
-            "❌ NEVER enable Trade or Withdrawal\n\n"
-            "🔗 Direct link: okx.com/account/my-api"
-        ),
-        "es": (
-            "📖 *Cómo crear tus claves API de OKX:*\n\n"
-            "1️⃣ Ve a okx.com → inicia sesión\n"
-            "2️⃣ Haz clic en tu perfil → *Configuración*\n"
-            "3️⃣ Selecciona *API*\n"
-            "4️⃣ Haz clic en *Crear clave API V5*\n"
-            "5️⃣ Establece un nombre y contraseña\n"
-            "6️⃣ Selecciona SOLO ✅ *Lectura*\n"
-            "❌ NUNCA actives Trade o Retiro\n\n"
-            "🔗 Enlace directo: okx.com/account/my-api"
-        ),
-        "pt": (
-            "📖 *Como criar suas chaves API da OKX:*\n\n"
-            "1️⃣ Vá para okx.com → faça login\n"
-            "2️⃣ Clique no seu perfil → *Configurações*\n"
-            "3️⃣ Selecione *API*\n"
-            "4️⃣ Clique em *Criar chave API V5*\n"
-            "5️⃣ Defina um nome e senha\n"
-            "6️⃣ Selecione APENAS ✅ *Leitura*\n"
-            "❌ NUNCA ative Trade ou Saque\n\n"
-            "🔗 Link direto: okx.com/account/my-api"
-        ),
-    },
-    "kraken": {
-        "fr": (
-            "📖 *Comment créer tes clés API Kraken :*\n\n"
-            "1️⃣ Va sur kraken.com → connecte-toi\n"
-            "2️⃣ Clique sur ton nom → *Sécurité*\n"
-            "3️⃣ Sélectionne *API*\n"
-            "4️⃣ Clique sur *Ajouter une clé*\n"
-            "5️⃣ Donne un nom (ex: CryptoCoach)\n"
-            "6️⃣ Coche UNIQUEMENT ✅ *Accès aux données du compte*\n"
-            "❌ Ne coche JAMAIS Trading ou Transfert\n\n"
-            "🔗 Lien direct : kraken.com/u/security/api"
-        ),
-        "en": (
-            "📖 *How to create your Kraken API keys:*\n\n"
-            "1️⃣ Go to kraken.com → log in\n"
-            "2️⃣ Click your name → *Security*\n"
-            "3️⃣ Select *API*\n"
-            "4️⃣ Click *Add key*\n"
-            "5️⃣ Give it a name (e.g. CryptoCoach)\n"
-            "6️⃣ Check ONLY ✅ *Query account data*\n"
-            "❌ NEVER enable Trading or Transfer\n\n"
-            "🔗 Direct link: kraken.com/u/security/api"
-        ),
-        "es": (
-            "📖 *Cómo crear tus claves API de Kraken:*\n\n"
-            "1️⃣ Ve a kraken.com → inicia sesión\n"
-            "2️⃣ Haz clic en tu nombre → *Seguridad*\n"
-            "3️⃣ Selecciona *API*\n"
-            "4️⃣ Haz clic en *Agregar clave*\n"
-            "5️⃣ Dale un nombre (ej: CryptoCoach)\n"
-            "6️⃣ Marca SOLO ✅ *Consultar datos de cuenta*\n"
-            "❌ NUNCA actives Trading o Transferencia\n\n"
-            "🔗 Enlace directo: kraken.com/u/security/api"
-        ),
-        "pt": (
-            "📖 *Como criar suas chaves API da Kraken:*\n\n"
-            "1️⃣ Vá para kraken.com → faça login\n"
-            "2️⃣ Clique no seu nome → *Segurança*\n"
-            "3️⃣ Selecione *API*\n"
-            "4️⃣ Clique em *Adicionar chave*\n"
-            "5️⃣ Dê um nome (ex: CryptoCoach)\n"
-            "6️⃣ Marque APENAS ✅ *Consultar dados da conta*\n"
-            "❌ NUNCA ative Trading ou Transferência\n\n"
-            "🔗 Link direto: kraken.com/u/security/api"
-        ),
-    },
-}
+EXCHANGE_API_INSTRUCTIONS = {
+        "binance": {
+            "fr": (
+                "📖 *Comment créer tes clés API Binance :*\n\n"
+                "1️⃣ Va sur binance.com → connecte-toi\n"
+                "2️⃣ Clique sur ton profil (en haut à droite)\n"
+                "3️⃣ Sélectionne *Gestion des API*\n"
+                "4️⃣ Clique sur *Créer une API*\n"
+                "5️⃣ Choisis *Clé API générée par le système*\n"
+                "6️⃣ Donne un nom (ex: CryptoCoach)\n"
+                "7️⃣ Active UNIQUEMENT ✅ *Lire*\n"
+                "❌ Ne coche JAMAIS Retrait ou Trading\n\n"
+                "🔗 Lien direct : myaccount.binance.com/fr/api-management"
+            ),
+            "en": (
+                "📖 *How to create your Binance API keys:*\n\n"
+                "1️⃣ Go to binance.com → log in\n"
+                "2️⃣ Click your profile (top right)\n"
+                "3️⃣ Select *API Management*\n"
+                "4️⃣ Click *Create API*\n"
+                "5️⃣ Choose *System generated API key*\n"
+                "6️⃣ Give it a name (e.g. CryptoCoach)\n"
+                "7️⃣ Enable ONLY ✅ *Read*\n"
+                "❌ NEVER enable Withdrawal or Trading\n\n"
+                "🔗 Direct link: myaccount.binance.com/en/api-management"
+            ),
+            "es": (
+                "📖 *Cómo crear tus claves API de Binance:*\n\n"
+                "1️⃣ Ve a binance.com → inicia sesión\n"
+                "2️⃣ Haz clic en tu perfil (arriba a la derecha)\n"
+                "3️⃣ Selecciona *Gestión de API*\n"
+                "4️⃣ Haz clic en *Crear API*\n"
+                "5️⃣ Elige *Clave API generada por el sistema*\n"
+                "6️⃣ Dale un nombre (ej: CryptoCoach)\n"
+                "7️⃣ Activa SOLO ✅ *Leer*\n"
+                "❌ NUNCA actives Retiro o Trading\n\n"
+                "🔗 Enlace directo: myaccount.binance.com/es/api-management"
+            ),
+            "pt": (
+                "📖 *Como criar suas chaves API da Binance:*\n\n"
+                "1️⃣ Vá para binance.com → faça login\n"
+                "2️⃣ Clique no seu perfil (canto superior direito)\n"
+                "3️⃣ Selecione *Gerenciamento de API*\n"
+                "4️⃣ Clique em *Criar API*\n"
+                "5️⃣ Escolha *Chave API gerada pelo sistema*\n"
+                "6️⃣ Dê um nome (ex: CryptoCoach)\n"
+                "7️⃣ Ative APENAS ✅ *Leitura*\n"
+                "❌ NUNCA ative Saque ou Trading\n\n"
+                "🔗 Link direto: myaccount.binance.com/pt/api-management"
+            ),
+        },
+        "bybit": {
+            "fr": (
+                "📖 *Comment créer tes clés API Bybit :*\n\n"
+                "1️⃣ Va sur bybit.com → connecte-toi\n"
+                "2️⃣ Clique sur ton profil → *Paramètres du compte*\n"
+                "3️⃣ Sélectionne *API* dans le menu\n"
+                "4️⃣ Clique sur *Créer une nouvelle clé*\n"
+                "5️⃣ Choisis *Clé API*\n"
+                "6️⃣ Donne un nom (ex: CryptoCoach)\n"
+                "7️⃣ Coche UNIQUEMENT ✅ *Lire*\n"
+                "❌ Ne coche JAMAIS Retrait ou Trade\n\n"
+                "🔗 Lien direct : bybit.com/app/user/api-management"
+            ),
+            "en": (
+                "📖 *How to create your Bybit API keys:*\n\n"
+                "1️⃣ Go to bybit.com → log in\n"
+                "2️⃣ Click your profile → *Account Settings*\n"
+                "3️⃣ Select *API* in the menu\n"
+                "4️⃣ Click *Create New Key*\n"
+                "5️⃣ Choose *API Key*\n"
+                "6️⃣ Give it a name (e.g. CryptoCoach)\n"
+                "7️⃣ Check ONLY ✅ *Read*\n"
+                "❌ NEVER enable Withdrawal or Trade\n\n"
+                "🔗 Direct link: bybit.com/app/user/api-management"
+            ),
+            "es": (
+                "📖 *Cómo crear tus claves API de Bybit:*\n\n"
+                "1️⃣ Ve a bybit.com → inicia sesión\n"
+                "2️⃣ Haz clic en tu perfil → *Configuración de cuenta*\n"
+                "3️⃣ Selecciona *API* en el menú\n"
+                "4️⃣ Haz clic en *Crear nueva clave*\n"
+                "5️⃣ Elige *Clave API*\n"
+                "6️⃣ Dale un nombre (ej: CryptoCoach)\n"
+                "7️⃣ Marca SOLO ✅ *Leer*\n"
+                "❌ NUNCA actives Retiro o Trade\n\n"
+                "🔗 Enlace directo: bybit.com/app/user/api-management"
+            ),
+            "pt": (
+                "📖 *Como criar suas chaves API da Bybit:*\n\n"
+                "1️⃣ Vá para bybit.com → faça login\n"
+                "2️⃣ Clique no seu perfil → *Configurações da conta*\n"
+                "3️⃣ Selecione *API* no menu\n"
+                "4️⃣ Clique em *Criar nova chave*\n"
+                "5️⃣ Escolha *Chave API*\n"
+                "6️⃣ Dê um nome (ex: CryptoCoach)\n"
+                "7️⃣ Marque APENAS ✅ *Leitura*\n"
+                "❌ NUNCA ative Saque ou Trade\n\n"
+                "🔗 Link direto: bybit.com/app/user/api-management"
+            ),
+        },
+        "kucoin": {
+            "fr": (
+                "📖 *Comment créer tes clés API KuCoin :*\n\n"
+                "1️⃣ Va sur kucoin.com → connecte-toi\n"
+                "2️⃣ Clique sur ton profil → *Gestion des API*\n"
+                "3️⃣ Clique sur *Créer une API*\n"
+                "4️⃣ Donne un nom et un mot de passe API\n"
+                "5️⃣ Coche UNIQUEMENT ✅ *Général* (lecture seule)\n"
+                "❌ Ne coche JAMAIS Trade ou Transfert\n\n"
+                "🔗 Lien direct : kucoin.com/account/api"
+            ),
+            "en": (
+                "📖 *How to create your KuCoin API keys:*\n\n"
+                "1️⃣ Go to kucoin.com → log in\n"
+                "2️⃣ Click your profile → *API Management*\n"
+                "3️⃣ Click *Create API*\n"
+                "4️⃣ Set a name and API passphrase\n"
+                "5️⃣ Check ONLY ✅ *General* (read only)\n"
+                "❌ NEVER enable Trade or Transfer\n\n"
+                "🔗 Direct link: kucoin.com/account/api"
+            ),
+            "es": (
+                "📖 *Cómo crear tus claves API de KuCoin:*\n\n"
+                "1️⃣ Ve a kucoin.com → inicia sesión\n"
+                "2️⃣ Haz clic en tu perfil → *Gestión de API*\n"
+                "3️⃣ Haz clic en *Crear API*\n"
+                "4️⃣ Establece un nombre y contraseña API\n"
+                "5️⃣ Marca SOLO ✅ *General* (solo lectura)\n"
+                "❌ NUNCA actives Trade o Transferencia\n\n"
+                "🔗 Enlace directo: kucoin.com/account/api"
+            ),
+            "pt": (
+                "📖 *Como criar suas chaves API da KuCoin:*\n\n"
+                "1️⃣ Vá para kucoin.com → faça login\n"
+                "2️⃣ Clique no seu perfil → *Gerenciamento de API*\n"
+                "3️⃣ Clique em *Criar API*\n"
+                "4️⃣ Defina um nome e senha API\n"
+                "5️⃣ Marque APENAS ✅ *Geral* (somente leitura)\n"
+                "❌ NUNCA ative Trade ou Transferência\n\n"
+                "🔗 Link direto: kucoin.com/account/api"
+            ),
+        },
+        "okx": {
+            "fr": (
+                "📖 *Comment créer tes clés API OKX :*\n\n"
+                "1️⃣ Va sur okx.com → connecte-toi\n"
+                "2️⃣ Clique sur ton profil → *Paramètres*\n"
+                "3️⃣ Sélectionne *API*\n"
+                "4️⃣ Clique sur *Créer une clé API V5*\n"
+                "5️⃣ Donne un nom et une passphrase\n"
+                "6️⃣ Sélectionne UNIQUEMENT ✅ *Lecture*\n"
+                "❌ Ne coche JAMAIS Trade ou Retrait\n\n"
+                "🔗 Lien direct : okx.com/account/my-api"
+            ),
+            "en": (
+                "📖 *How to create your OKX API keys:*\n\n"
+                "1️⃣ Go to okx.com → log in\n"
+                "2️⃣ Click your profile → *Settings*\n"
+                "3️⃣ Select *API*\n"
+                "4️⃣ Click *Create V5 API Key*\n"
+                "5️⃣ Set a name and passphrase\n"
+                "6️⃣ Select ONLY ✅ *Read*\n"
+                "❌ NEVER enable Trade or Withdrawal\n\n"
+                "🔗 Direct link: okx.com/account/my-api"
+            ),
+            "es": (
+                "📖 *Cómo crear tus claves API de OKX:*\n\n"
+                "1️⃣ Ve a okx.com → inicia sesión\n"
+                "2️⃣ Haz clic en tu perfil → *Configuración*\n"
+                "3️⃣ Selecciona *API*\n"
+                "4️⃣ Haz clic en *Crear clave API V5*\n"
+                "5️⃣ Establece un nombre y contraseña\n"
+                "6️⃣ Selecciona SOLO ✅ *Lectura*\n"
+                "❌ NUNCA actives Trade o Retiro\n\n"
+                "🔗 Enlace directo: okx.com/account/my-api"
+            ),
+            "pt": (
+                "📖 *Como criar suas chaves API da OKX:*\n\n"
+                "1️⃣ Vá para okx.com → faça login\n"
+                "2️⃣ Clique no seu perfil → *Configurações*\n"
+                "3️⃣ Selecione *API*\n"
+                "4️⃣ Clique em *Criar chave API V5*\n"
+                "5️⃣ Defina um nome e senha\n"
+                "6️⃣ Selecione APENAS ✅ *Leitura*\n"
+                "❌ NUNCA ative Trade ou Saque\n\n"
+                "🔗 Link direto: okx.com/account/my-api"
+            ),
+        },
+        "kraken": {
+            "fr": (
+                "📖 *Comment créer tes clés API Kraken :*\n\n"
+                "1️⃣ Va sur kraken.com → connecte-toi\n"
+                "2️⃣ Clique sur ton nom → *Sécurité*\n"
+                "3️⃣ Sélectionne *API*\n"
+                "4️⃣ Clique sur *Ajouter une clé*\n"
+                "5️⃣ Donne un nom (ex: CryptoCoach)\n"
+                "6️⃣ Coche UNIQUEMENT ✅ *Accès aux données du compte*\n"
+                "❌ Ne coche JAMAIS Trading ou Transfert\n\n"
+                "🔗 Lien direct : kraken.com/u/security/api"
+            ),
+            "en": (
+                "📖 *How to create your Kraken API keys:*\n\n"
+                "1️⃣ Go to kraken.com → log in\n"
+                "2️⃣ Click your name → *Security*\n"
+                "3️⃣ Select *API*\n"
+                "4️⃣ Click *Add key*\n"
+                "5️⃣ Give it a name (e.g. CryptoCoach)\n"
+                "6️⃣ Check ONLY ✅ *Query account data*\n"
+                "❌ NEVER enable Trading or Transfer\n\n"
+                "🔗 Direct link: kraken.com/u/security/api"
+            ),
+            "es": (
+                "📖 *Cómo crear tus claves API de Kraken:*\n\n"
+                "1️⃣ Ve a kraken.com → inicia sesión\n"
+                "2️⃣ Haz clic en tu nombre → *Seguridad*\n"
+                "3️⃣ Selecciona *API*\n"
+                "4️⃣ Haz clic en *Agregar clave*\n"
+                "5️⃣ Dale un nombre (ej: CryptoCoach)\n"
+                "6️⃣ Marca SOLO ✅ *Consultar datos de cuenta*\n"
+                "❌ NUNCA actives Trading o Transferencia\n\n"
+                "🔗 Enlace directo: kraken.com/u/security/api"
+            ),
+            "pt": (
+                "📖 *Como criar suas chaves API da Kraken:*\n\n"
+                "1️⃣ Vá para kraken.com → faça login\n"
+                "2️⃣ Clique no seu nome → *Segurança*\n"
+                "3️⃣ Selecione *API*\n"
+                "4️⃣ Clique em *Adicionar chave*\n"
+                "5️⃣ Dê um nome (ex: CryptoCoach)\n"
+                "6️⃣ Marque APENAS ✅ *Consultar dados da conta*\n"
+                "❌ NUNCA ative Trading ou Transferência\n\n"
+                "🔗 Link direto: kraken.com/u/security/api"
+            ),
+        },
+    }
 
 # ─── /exchange ───────────────────────────────────────────────────
 
