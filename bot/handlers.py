@@ -4,6 +4,7 @@ from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from bot.payment_handlers import check_free_limit
 
 from config import detect_language
 from locales.translations import (
@@ -224,6 +225,9 @@ async def process_goal(callback: CallbackQuery, state: FSMContext):
 async def handle_coaching_message(message: Message, state: FSMContext):
     data = await state.get_data()
     lang = data.get("language", "en")
+    # Vérifier la limite freemium
+    if not await check_free_limit(message, lang):
+        return
     user_id = message.from_user.id
 
     thinking_msg = await message.answer(TEXTS["thinking"][lang])
@@ -778,6 +782,9 @@ async def process_view_trades(callback: CallbackQuery):
             return
 
         lang = user["language"]
+        # Vérifier la limite freemium
+        if not await check_free_limit(message, lang):
+            return
 
         # Remettre l'état coaching et traiter le message
         await state.update_data(language=lang)

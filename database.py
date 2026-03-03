@@ -10,7 +10,7 @@ pool = None
 async def init_db():
     global pool
     pool = await asyncpg.create_pool(DATABASE_URL)
-    
+
     async with pool.acquire() as conn:
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -26,7 +26,7 @@ async def init_db():
                 created_at TIMESTAMP DEFAULT NOW()
             )
         """)
-        
+
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS conversations (
                 id SERIAL PRIMARY KEY,
@@ -36,7 +36,7 @@ async def init_db():
                 created_at TIMESTAMP DEFAULT NOW()
             )
         """)
-        
+
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS psychological_profile (
                 user_id BIGINT PRIMARY KEY REFERENCES users(user_id),
@@ -58,7 +58,7 @@ async def init_db():
                 PRIMARY KEY (user_id, exchange)
             )
         """)
-        
+
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS trades (
                 id SERIAL PRIMARY KEY,
@@ -74,7 +74,20 @@ async def init_db():
                 created_at TIMESTAMP DEFAULT NOW()
             )
         """)
-    
+
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS subscriptions (
+                user_id BIGINT PRIMARY KEY REFERENCES users(user_id),
+                plan TEXT DEFAULT 'free',
+                stripe_customer_id TEXT,
+                stripe_subscription_id TEXT,
+                status TEXT DEFAULT 'active',
+                current_period_end TIMESTAMP,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+
     print("✅ Base de données initialisée !")
 
 # ─── Fonctions utilisateur ───────────────────────────────────────
@@ -97,24 +110,24 @@ async def create_user(user_id: int, username: str, language: str) -> dict:
             SET username = $2, last_active = NOW()
             RETURNING *
         """, user_id, username, language)
-        
+
         await conn.execute("""
             INSERT INTO psychological_profile (user_id)
             VALUES ($1)
             ON CONFLICT (user_id) DO NOTHING
         """, user_id)
-        
+
         return dict(row)
 
 async def update_user_profile(user_id: int, **kwargs) -> None:
     if not kwargs:
         return
-    
+
     fields = ", ".join(
         f"{key} = ${i+2}" for i, key in enumerate(kwargs.keys())
     )
     values = list(kwargs.values())
-    
+
     async with pool.acquire() as conn:
         await conn.execute(
             f"UPDATE users SET {fields}, last_active = NOW() WHERE user_id = $1",
@@ -147,7 +160,7 @@ async def get_conversation_history(user_id: int, limit: int = 20) -> list:
             ORDER BY created_at DESC
             LIMIT $2
         """, user_id, limit)
-        
+
         messages = [{"role": r["role"], "content": r["content"]} for r in reversed(rows)]
         return messages
 
@@ -174,11 +187,11 @@ async def add_bias(user_id: int, bias: str) -> None:
     profile = await get_psychological_profile(user_id)
     if not profile:
         return
-    
+
     biases = profile["detected_biases"]
     if bias not in biases:
         biases.append(bias)
-    
+
     async with pool.acquire() as conn:
         await conn.execute("""
             UPDATE psychological_profile
@@ -243,3 +256,52 @@ async def delete_exchange_connection(user_id: int, exchange: str) -> None:
             DELETE FROM exchange_connections
             WHERE user_id = $1 AND exchange = $2
         """, user_id, exchange)
+
+# ─── Fonctions abonnement ────────────────────────────────────────
+
+async def get_subscription(user_id: int) -> dict | None:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT * FROM subscriptions WHERE user_id = $1", user_id
+        )
+        return dict(row) if row else None
+
+async def create_or_update_subscription(
+    user_id: int,
+    plan: str,
+    stripe_customer_id: str = None,
+    stripe_subscription_id: str = None,
+    status: str = "active",
+    current_period_end=None
+) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            INSERT INTO subscriptions 
+            (user_id, plan, stripe_customer_id, stripe_subscription_id, 
+             status, current_period_end, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, NOW())
+            ON CONFLICT (user_id) DO UPDATE SET
+                plan = $2,
+                stripe_customer_id = COALESCE($3, subscriptions.stripe_customer_id),
+                stripe_subscription_id = COALESCE($4, subscriptions.stripe_subscription_id),
+                status = $5,
+                current_period_end = $6,
+                updated_at = NOW()
+        """, user_id, plan, stripe_customer_id,
+            stripe_subscription_id, status, current_period_end)
+
+async def is_premium(user_id: int) -> bool:
+    sub = await get_subscription(user_id)
+    if not sub:
+        return False
+    return sub["plan"] in ["monthly", "yearly"] and sub["status"] == "active"
+
+async def get_daily_message_count(user_id: int) -> int:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("""
+            SELECT COUNT(*) as count FROM conversations
+            WHERE user_id = $1 
+            AND role = 'user'
+            AND created_at >= NOW() - INTERVAL '24 hours'
+        """, user_id)
+        return row["count"] if row else 0
