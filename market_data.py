@@ -15,7 +15,7 @@ TOP_CRYPTOS = {
     "polkadot": "DOT",
     "chainlink": "LINK",
 }
-    async def get_metals_prices() -> dict:
+async def get_metals_prices() -> dict:
         """Récupère les prix de l'or et l'argent via Yahoo Finance."""
         try:
             import yfinance as yf
