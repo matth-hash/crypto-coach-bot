@@ -6,6 +6,7 @@ A multilingual Telegram crypto trading coaching bot.
 - Python 3.10+
 - aiogram 3.4.1 (Telegram Bot API)
 - pycoingecko (Market Data API)
+- yfinance (Stock & Crypto Data)
 - Anthropic Claude AI (Coaching Engine)
 - PostgreSQL (Database)
 - ccxt (Exchange Integration)

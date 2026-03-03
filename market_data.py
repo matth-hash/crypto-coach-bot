@@ -15,6 +15,39 @@ TOP_CRYPTOS = {
     "polkadot": "DOT",
     "chainlink": "LINK",
 }
+    async def get_metals_prices() -> dict:
+        """Récupère les prix de l'or et l'argent via Yahoo Finance."""
+        try:
+            import yfinance as yf
+            import asyncio
+
+            def fetch():
+                metals = {}
+                gold = yf.Ticker("GC=F")
+                silver = yf.Ticker("SI=F")
+
+                gold_info = gold.fast_info
+                silver_info = silver.fast_info
+
+                if gold_info.last_price:
+                    metals["XAU"] = {
+                        "price": round(gold_info.last_price, 2),
+                        "change_24h": 0
+                    }
+                if silver_info.last_price:
+                    metals["XAG"] = {
+                        "price": round(silver_info.last_price, 2),
+                        "change_24h": 0
+                    }
+                return metals
+
+            # Exécuter en thread séparé car yfinance est synchrone
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(None, fetch)
+
+        except Exception as e:
+            print(f"Erreur metals yfinance: {e}")
+            return {}
 
 # Cache simple pour éviter trop d'appels API
 _cache = {}
@@ -86,6 +119,7 @@ async def get_fear_greed_index() -> dict:
 async def format_market_context(lang: str) -> str:
     """Formate le contexte de marché pour injection dans le prompt IA."""
     prices = await get_crypto_prices()
+    metals = await get_metals_prices()
     fear_greed = await get_fear_greed_index()
 
     if not prices:
@@ -100,6 +134,14 @@ async def format_market_context(lang: str) -> str:
             f"{arrow} {symbol}: ${data['price']:,.2f} "
             f"({change:+.1f}% 24h)"
         )
+
+    # Ajouter or et argent
+    if metals:
+        lines.append("─────────────────")
+        metal_labels = {"XAU": "🥇 Or (Gold)", "XAG": "🥈 Argent (Silver)"}
+        for symbol, data in metals.items():
+            label = metal_labels.get(symbol, symbol)
+            lines.append(f"{label}: ${data['price']:,.2f}/oz")
 
     fg_value = fear_greed["value"]
     fg_class = fear_greed["classification"]
