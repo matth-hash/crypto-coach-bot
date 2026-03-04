@@ -224,10 +224,9 @@ async def cmd_activate(message: Message):
     user = await get_user(user_id)
     lang = user["language"] if user else "en"
 
-    from datetime import timedelta
-    from datetime import datetime, timezone
+    from datetime import timedelta, datetime
 
-    end_date = datetime.now(timezone.utc) + timedelta(days=30)
+    end_date = datetime.utcnow() + timedelta(days=30)
     await create_or_update_subscription(
         user_id, "monthly", status="active",
         current_period_end=end_date

@@ -9,22 +9,26 @@ from bot.exchange_handlers import router as exchange_router
 from bot.psychology_handlers import router as psychology_router
 from bot.gamification_handlers import router as gamification_router
 from bot.payment_handlers import router as payment_router
+from bot.help_handlers import router as help_router
+from bot.callback_handlers import router as callback_router
 from database import init_db
 
 logging.basicConfig(level=logging.INFO)
 
 async def main():
     await init_db()
-
+    
     bot = Bot(token=TELEGRAM_TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
-
+    
     dp.include_router(exchange_router)
     dp.include_router(psychology_router)
     dp.include_router(gamification_router)
     dp.include_router(payment_router)
+    dp.include_router(help_router)
+    dp.include_router(callback_router)
     dp.include_router(main_router)
-
+    
     print("🚀 CryptoCoach Bot démarré !")
     await dp.start_polling(bot)
 
