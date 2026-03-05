@@ -1,0 +1,24 @@
+[phases.setup]
+nixPkgs = ["python311", "gcc", "postgresql"]
+
+[phases.install]
+cmds = ["pip install --upgrade pip", "pip install -r requirements.txt"]
+
+[start]
+cmd = "python main.py"
+```
+
+---
+
+### Étape 3 — Met à jour `requirements.txt`
+```
+aiogram==3.4.1
+anthropic==0.25.0
+httpx==0.27.0
+python-dotenv==1.0.0
+aiohttp==3.9.3
+asyncpg==0.29.0
+ccxt==4.2.25
+pycoingecko==3.1.0
+yfinance==0.2.36
+stripe==7.9.0
