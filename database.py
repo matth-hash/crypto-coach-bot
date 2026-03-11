@@ -27,6 +27,12 @@ async def init_db():
             )
         """)
 
+        # Ajout colonne morning_time si elle n'existe pas encore
+        await conn.execute("""
+            ALTER TABLE users
+            ADD COLUMN IF NOT EXISTS morning_time TEXT DEFAULT NULL
+        """)
+
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS conversations (
                 id SERIAL PRIMARY KEY,
@@ -85,6 +91,19 @@ async def init_db():
                 current_period_end TIMESTAMP,
                 created_at TIMESTAMP DEFAULT NOW(),
                 updated_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS price_alerts (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT REFERENCES users(user_id),
+                symbol TEXT NOT NULL,
+                condition TEXT NOT NULL,
+                target_price DECIMAL NOT NULL,
+                active BOOLEAN DEFAULT TRUE,
+                triggered_at TIMESTAMP DEFAULT NULL,
+                created_at TIMESTAMP DEFAULT NOW()
             )
         """)
 
@@ -305,3 +324,75 @@ async def get_daily_message_count(user_id: int) -> int:
             AND created_at >= NOW() - INTERVAL '24 hours'
         """, user_id)
         return row["count"] if row else 0
+
+# ─── Fonctions notifications matinales ──────────────────────────
+
+async def set_morning_time(user_id: int, time_str: str) -> None:
+    """Enregistre l'heure de notification matinale (format HH:MM)."""
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            UPDATE users SET morning_time = $2 WHERE user_id = $1
+        """, user_id, time_str)
+
+async def get_users_for_morning_brief(current_time: str) -> list:
+    """Retourne les users dont l'heure de brief correspond à l'heure actuelle."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT user_id, language, level, trading_style, goal
+            FROM users
+            WHERE morning_time = $1
+        """, current_time)
+        return [dict(r) for r in rows]
+
+# ─── Fonctions alertes de prix ───────────────────────────────────
+
+async def create_price_alert(
+    user_id: int, symbol: str, condition: str, target_price: float
+) -> int:
+    """Crée une alerte. condition = 'above' ou 'below'. Retourne l'id."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("""
+            INSERT INTO price_alerts (user_id, symbol, condition, target_price)
+            VALUES ($1, $2, $3, $4)
+            RETURNING id
+        """, user_id, symbol, condition, target_price)
+        return row["id"]
+
+async def get_user_alerts(user_id: int) -> list:
+    """Retourne toutes les alertes actives d'un utilisateur."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT * FROM price_alerts
+            WHERE user_id = $1 AND active = TRUE
+            ORDER BY created_at DESC
+        """, user_id)
+        return [dict(r) for r in rows]
+
+async def get_all_active_alerts() -> list:
+    """Retourne toutes les alertes actives (pour le scheduler)."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT pa.*, u.language
+            FROM price_alerts pa
+            JOIN users u ON u.user_id = pa.user_id
+            WHERE pa.active = TRUE
+        """)
+        return [dict(r) for r in rows]
+
+async def deactivate_alert(alert_id: int) -> None:
+    """Désactive une alerte après déclenchement ou suppression manuelle."""
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            UPDATE price_alerts
+            SET active = FALSE, triggered_at = NOW()
+            WHERE id = $1
+        """, alert_id)
+
+async def delete_alert(alert_id: int, user_id: int) -> bool:
+    """Supprime une alerte (vérifie que l'alerte appartient au user)."""
+    async with pool.acquire() as conn:
+        result = await conn.execute("""
+            DELETE FROM price_alerts
+            WHERE id = $1 AND user_id = $2
+        """, alert_id, user_id)
+        return result == "DELETE 1"
