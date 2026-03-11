@@ -19,9 +19,15 @@ async def test_connection(exchange_id: str, api_key: str, api_secret: str) -> di
             "enableRateLimit": True,
         })
 
-        balance = await exchange.fetch_balance()
-        total_assets = {k: v for k, v in balance["total"].items() if v > 0}
+        # Utilise fetch_balance avec type 'spot' uniquement
+        # → appelle /api/v3/account au lieu de /sapi/v1/capital/config/getall
+        # → ne nécessite que la permission "Lecture seule"
+        if exchange_id == "binance":
+            balance = await exchange.fetch_balance({"type": "spot"})
+        else:
+            balance = await exchange.fetch_balance()
 
+        total_assets = {k: v for k, v in balance["total"].items() if v > 0}
         return {
             "success": True,
             "message": "Connexion réussie",
@@ -30,7 +36,7 @@ async def test_connection(exchange_id: str, api_key: str, api_secret: str) -> di
     except ccxt_async.AuthenticationError:
         return {"success": False, "message": "Clés API invalides"}
     except ccxt_async.PermissionDenied:
-        return {"success": False, "message": "Permissions insuffisantes"}
+        return {"success": False, "message": "Permissions insuffisantes — active 'Lecture seule' sur ta clé Binance"}
     except Exception as e:
         return {"success": False, "message": f"Erreur : {str(e)[:100]}"}
     finally:
@@ -48,17 +54,14 @@ async def fetch_recent_trades(
             "secret": api_secret,
             "enableRateLimit": True,
         })
-
         await exchange.load_markets()
         all_trades = []
-
         common_pairs = [
-    "BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT",
-    "XRP/USDT", "ADA/USDT", "DOGE/USDT", "MATIC/USDT",
-    "BTC/USD", "ETH/USD",  # Pour Kraken qui utilise USD
-    "BTC/USDC", "ETH/USDC"  # Paires USDC de plus en plus communes
+            "BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT",
+            "XRP/USDT", "ADA/USDT", "DOGE/USDT", "MATIC/USDT",
+            "BTC/USD", "ETH/USD",
+            "BTC/USDC", "ETH/USDC"
         ]
-
         for pair in common_pairs:
             if pair not in exchange.markets:
                 continue
@@ -70,7 +73,6 @@ async def fetch_recent_trades(
 
         all_trades.sort(key=lambda x: x["timestamp"], reverse=True)
         return all_trades[:limit]
-
     except Exception as e:
         print(f"Erreur fetch trades: {e}")
         return []
@@ -81,20 +83,16 @@ async def fetch_recent_trades(
 def format_trades_for_analysis(trades: list) -> str:
     if not trades:
         return "Aucun trade récent trouvé."
-
     formatted = []
     for t in trades[:10]:
         date = datetime.fromtimestamp(
             t["timestamp"] / 1000, tz=timezone.utc
         ).strftime("%d/%m/%Y %H:%M")
-
         side = "🟢 ACHAT" if t["side"] == "buy" else "🔴 VENTE"
-
         formatted.append(
             f"{side} {t['symbol']} | "
             f"Prix: {t['price']:.4f} | "
             f"Qté: {t['amount']:.4f} | "
             f"Date: {date}"
         )
-
     return "\n".join(formatted)
