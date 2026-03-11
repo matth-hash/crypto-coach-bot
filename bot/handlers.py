@@ -44,6 +44,25 @@ def make_keyboard(buttons: list, prefix: str):
     builder.adjust(1)
     return builder.as_markup()
 
+def make_style_keyboard(buttons: list, prefix: str, lang: str):
+    """Keyboard pour le style de trading avec bouton lexique."""
+    builder = InlineKeyboardBuilder()
+    for btn in buttons:
+        builder.button(text=btn, callback_data=f"{prefix}:{btn}")
+    builder.adjust(1)
+    lexique_labels = {
+        "fr": "📚 C'est quoi ces termes ?",
+        "en": "📚 What do these terms mean?",
+        "es": "📚 ¿Qué significan estos términos?",
+        "pt": "📚 O que significam esses termos?",
+    }
+    builder.button(
+        text=lexique_labels.get(lang, lexique_labels["en"]),
+        callback_data="show_lexique"
+    )
+    builder.adjust(1)
+    return builder.as_markup()
+
 # ─── /start ─────────────────────────────────────────────────────
 
 @router.message(CommandStart())
@@ -52,25 +71,22 @@ async def cmd_start(message: Message, state: FSMContext):
     username = message.from_user.username or message.from_user.first_name
     lang = detect_language(message.from_user.language_code)
 
-    # Vérifier si l'utilisateur existe déjà
     existing_user = await get_user(user_id)
 
     if existing_user and existing_user.get("level"):
-        # Utilisateur connu — on le reconnecte
         lang = existing_user["language"]
         await state.update_data(language=lang)
         await state.set_state(ProfileSetup.coaching)
 
         returning_messages = {
-            "fr": f"👋 Content de te revoir ! Ton profil est intact. Pose-moi une question !",
-            "en": f"👋 Welcome back! Your profile is intact. Ask me a question!",
-            "es": f"👋 ¡Bienvenido de nuevo! Tu perfil está intacto. ¡Hazme una question!",
-            "pt": f"👋 Bem-vindo de volta! Seu perfil está intacto. Faça-me uma pergunta!",
+            "fr": "👋 Content de te revoir ! Ton profil est intact. Pose-moi une question !",
+            "en": "👋 Welcome back! Your profile is intact. Ask me a question!",
+            "es": "👋 ¡Bienvenido de nuevo! Tu perfil está intacto. ¡Hazme una pregunta!",
+            "pt": "👋 Bem-vindo de volta! Seu perfil está intacto. Faça-me uma pergunta!",
         }
         await message.answer(returning_messages[lang])
         return
 
-    # Nouvel utilisateur
     await create_user(user_id, username, lang)
     await state.update_data(language=lang)
     await message.answer(TEXTS["welcome"][lang])
@@ -158,15 +174,21 @@ async def process_level(callback: CallbackQuery, state: FSMContext):
     await update_user_profile(user_id, level=level)
 
     await callback.message.edit_reply_markup()
+    # ── Utilise le keyboard avec bouton lexique pour le style ──
     await callback.message.answer(
         TEXTS["question_style"][lang],
-        reply_markup=make_keyboard(STYLE_BUTTONS[lang], "style")
+        reply_markup=make_style_keyboard(STYLE_BUTTONS[lang], "style", lang)
     )
     await state.set_state(ProfileSetup.waiting_style)
     await callback.answer()
 
 @router.callback_query(ProfileSetup.waiting_style)
 async def process_style(callback: CallbackQuery, state: FSMContext):
+    # Ignore le bouton lexique — géré par son propre handler
+    if callback.data == "show_lexique":
+        await callback.answer()
+        return
+
     data = await state.get_data()
     lang = data.get("language", "en")
     user_id = callback.from_user.id
@@ -208,15 +230,36 @@ async def process_goal(callback: CallbackQuery, state: FSMContext):
         intro_messages[lang], lang, user, []
     )
 
-    # Sauvegarder en base
     await save_message(user_id, "user", intro_messages[lang])
     await save_message(user_id, "assistant", response)
-    await update_xp(user_id, 20)  # +20 XP pour avoir complété le profil
+    await update_xp(user_id, 20)
 
     await thinking_msg.delete()
     await callback.message.answer(response)
     await callback.message.answer(TEXTS["ask_question"][lang])
     await state.set_state(ProfileSetup.coaching)
+    await callback.answer()
+
+# ─── Lexique callback (accessible pendant l'onboarding) ──────────
+
+@router.callback_query(F.data == "show_lexique")
+async def cb_show_lexique(callback: CallbackQuery):
+    from bot.lexique_handlers import get_lexique_keyboard
+    user_id = callback.from_user.id
+    user = await get_user(user_id)
+    lang = user["language"] if user else "fr"
+
+    titles = {
+        "fr": "📚 *Lexique Trading*\n\nClique sur un terme pour sa définition :",
+        "en": "📚 *Trading Glossary*\n\nTap a term for its definition:",
+        "es": "📚 *Glosario de Trading*\n\nToca un término para ver su definición:",
+        "pt": "📚 *Glossário de Trading*\n\nClique em um termo para ver sua definição:",
+    }
+    await callback.message.answer(
+        titles.get(lang, titles["fr"]),
+        reply_markup=get_lexique_keyboard(lang),
+        parse_mode="Markdown"
+    )
     await callback.answer()
 
 # ─── Coaching principal ──────────────────────────────────────────
@@ -225,11 +268,11 @@ async def process_goal(callback: CallbackQuery, state: FSMContext):
 async def handle_coaching_message(message: Message, state: FSMContext):
     data = await state.get_data()
     lang = data.get("language", "en")
-    # Vérifier la limite freemium
+
     if not await check_free_limit(message, lang):
         return
-    user_id = message.from_user.id
 
+    user_id = message.from_user.id
     thinking_msg = await message.answer(TEXTS["thinking"][lang])
 
     user = await get_user(user_id)
@@ -242,12 +285,10 @@ async def handle_coaching_message(message: Message, state: FSMContext):
         message.text, lang, user or {}, history
     )
 
-    # Sauvegarder en base
     await save_message(user_id, "user", message.text)
     await save_message(user_id, "assistant", response)
-    await update_xp(user_id, 5)  # +5 XP par message
+    await update_xp(user_id, 5)
 
-    # Streak et badge
     streak, badge_msg = await update_streak(user_id, lang)
     if badge_msg:
         await message.answer(badge_msg, parse_mode="Markdown")
@@ -261,6 +302,7 @@ async def handle_coaching_message(message: Message, state: FSMContext):
     await message.answer(response)
 
 # ─── /exchange ───────────────────────────────────────────────────
+
 EXCHANGE_API_INSTRUCTIONS = {
         "binance": {
             "fr": (
@@ -567,16 +609,12 @@ async def process_exchange_select(callback: CallbackQuery, state: FSMContext):
 # ─── Flux de connexion ───────────────────────────────────────────
 
 async def start_api_key_flow(message, state, exchange_id, lang):
-    """Lance le flux avec instructions puis demande la clé API."""
-
-    # Instructions spécifiques à l'exchange
     instructions = EXCHANGE_API_INSTRUCTIONS.get(exchange_id, {})
     instruction_text = instructions.get(lang, instructions.get("en", ""))
 
     if instruction_text:
         await message.answer(instruction_text, parse_mode="Markdown")
 
-    # Demande de clé
     security_texts = {
         "fr": "✅ *Clés prêtes ?*\n\nEnvoie maintenant ta *clé API* :",
         "en": "✅ *Keys ready?*\n\nNow send your *API Key* :",
@@ -769,45 +807,45 @@ async def process_reconnect(callback: CallbackQuery, state: FSMContext):
 async def process_view_trades(callback: CallbackQuery):
     await callback.message.answer("/trades")
     await callback.answer()
-    # ─── Fallback — messages sans état défini ───────────────────────
 
-    @router.message()
-    async def fallback_message(message: Message, state: FSMContext):
-        """Attrape tous les messages non gérés par les autres handlers."""
-        user_id = message.from_user.id
-        user = await get_user(user_id)
+# ─── Fallback — messages sans état défini ────────────────────────
 
-        if not user or not user.get("level"):
-            await message.answer("Envoie /start pour commencer.")
-            return
+@router.message()
+async def fallback_message(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    user = await get_user(user_id)
 
-        lang = user["language"]
-        # Vérifier la limite freemium
-        if not await check_free_limit(message, lang):
-            return
+    if not user or not user.get("level"):
+        await message.answer("Envoie /start pour commencer.")
+        return
 
-        # Remettre l'état coaching et traiter le message
-        await state.update_data(language=lang)
-        await state.set_state(ProfileSetup.coaching)
+    lang = user["language"]
 
-        thinking_msg = await message.answer(TEXTS["thinking"][lang])
-        history = await get_conversation_history(user_id)
+    if not await check_free_limit(message, lang):
+        return
 
-        response = await get_coaching_response(
-            message.text, lang, user, history
-        )
+    await state.update_data(language=lang)
+    await state.set_state(ProfileSetup.coaching)
 
-        await save_message(user_id, "user", message.text)
-        await save_message(user_id, "assistant", response)
-        await update_xp(user_id, 5)
+    thinking_msg = await message.answer(TEXTS["thinking"][lang])
+    history = await get_conversation_history(user_id)
 
-        streak, streak_badge = await update_streak(user_id, lang)
-        first_msg_badge = await check_and_award_badge(user_id, "first_message", lang)
+    response = await get_coaching_response(
+        message.text, lang, user, history
+    )
 
-        await thinking_msg.delete()
-        await message.answer(response)
+    await save_message(user_id, "user", message.text)
+    await save_message(user_id, "assistant", response)
+    await update_xp(user_id, 5)
 
-        if first_msg_badge:
-            await message.answer(first_msg_badge, parse_mode="Markdown")
-        if streak_badge:
-            await message.answer(streak_badge, parse_mode="Markdown")
+    streak, streak_badge = await update_streak(user_id, lang)
+    from gamification import check_and_award_badge
+    first_msg_badge = await check_and_award_badge(user_id, "first_message", lang)
+
+    await thinking_msg.delete()
+    await message.answer(response)
+
+    if first_msg_badge:
+        await message.answer(first_msg_badge, parse_mode="Markdown")
+    if streak_badge:
+        await message.answer(streak_badge, parse_mode="Markdown")
