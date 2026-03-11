@@ -184,10 +184,25 @@ async def process_level(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(ProfileSetup.waiting_style)
 async def process_style(callback: CallbackQuery, state: FSMContext):
-    # Ignore le bouton lexique — géré par son propre handler
+    # ── Fix : affiche le lexique sans quitter l'état waiting_style ──
     if callback.data == "show_lexique":
+        from bot.lexique_handlers import get_lexique_keyboard
+        user_id = callback.from_user.id
+        user = await get_user(user_id)
+        lang = user["language"] if user else "fr"
+        titles = {
+            "fr": "📚 *Lexique Trading*\n\nClique sur un terme pour sa définition :",
+            "en": "📚 *Trading Glossary*\n\nTap a term for its definition:",
+            "es": "📚 *Glosario de Trading*\n\nToca un término para ver su definición:",
+            "pt": "📚 *Glossário de Trading*\n\nClique em um termo para ver sua definição:",
+        }
+        await callback.message.answer(
+            titles.get(lang, titles["fr"]),
+            reply_markup=get_lexique_keyboard(lang),
+            parse_mode="Markdown"
+        )
         await callback.answer()
-        return
+        return  # Reste en waiting_style — l'utilisateur choisit encore son style
 
     data = await state.get_data()
     lang = data.get("language", "en")
