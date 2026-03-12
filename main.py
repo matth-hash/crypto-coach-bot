@@ -12,6 +12,7 @@ from bot.help_handlers import router as help_router
 from bot.callback_handlers import router as callback_router
 from bot.lexique_handlers import router as lexique_router
 from bot.morning_handlers import router as morning_router
+from bot.alerts_handlers import router as alerts_router
 from database import init_db
 from scheduler import run_morning_briefs, run_price_alerts
 
@@ -30,10 +31,11 @@ async def main():
     dp.include_router(help_router)
     dp.include_router(lexique_router)
     dp.include_router(morning_router)
+    dp.include_router(alerts_router)
     dp.include_router(callback_router)
     dp.include_router(main_router)
 
-    # Démarrage des jobs en arrière-plan
+    # Jobs en arrière-plan
     asyncio.create_task(run_morning_briefs(bot))
     asyncio.create_task(run_price_alerts(bot))
 
