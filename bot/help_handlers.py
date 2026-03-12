@@ -23,7 +23,7 @@ async def cmd_help(message: Message):
 
     help_texts = {
         "fr": (
-            "❓ *Aide CryptoCoach*\n\n"
+            "❓ *Aide TradeCoach AI*\n\n"
             f"📋 Ton plan : {plan_texts['fr']}\n\n"
             "─────────────────\n"
             "👤 *Profil & Progression*\n"
@@ -40,6 +40,14 @@ async def cmd_help(message: Message):
             "/psycho — Rapport de tes biais\n"
             "/check — Vérification comportementale\n\n"
             "─────────────────\n"
+            "🔔 *Notifications & Alertes*\n"
+            "/morning — 🌅 Brief marché quotidien\n"
+            "/alerte — Créer une alerte de prix\n"
+            "/alertes — Gérer tes alertes actives\n\n"
+            "─────────────────\n"
+            "📚 *Éducation*\n"
+            "/lexique — Termes de trading expliqués\n\n"
+            "─────────────────\n"
             "💎 *Premium*\n"
             "/premium — Voir les offres\n"
             "/activate — Activer après paiement\n\n"
@@ -51,7 +59,7 @@ async def cmd_help(message: Message):
             "BTC, ETH, SOL, Or, Argent et plus encore."
         ),
         "en": (
-            "❓ *CryptoCoach Help*\n\n"
+            "❓ *TradeCoach AI Help*\n\n"
             f"📋 Your plan: {plan_texts['en']}\n\n"
             "─────────────────\n"
             "👤 *Profile & Progress*\n"
@@ -68,6 +76,14 @@ async def cmd_help(message: Message):
             "/psycho — Your bias report\n"
             "/check — Behavioral check\n\n"
             "─────────────────\n"
+            "🔔 *Notifications & Alerts*\n"
+            "/morning — 🌅 Daily market brief\n"
+            "/alerte — Create a price alert\n"
+            "/alertes — Manage your active alerts\n\n"
+            "─────────────────\n"
+            "📚 *Education*\n"
+            "/lexique — Trading terms explained\n\n"
+            "─────────────────\n"
             "💎 *Premium*\n"
             "/premium — View plans\n"
             "/activate — Activate after payment\n\n"
@@ -79,7 +95,7 @@ async def cmd_help(message: Message):
             "BTC, ETH, SOL, Gold, Silver and more."
         ),
         "es": (
-            "❓ *Ayuda CryptoCoach*\n\n"
+            "❓ *Ayuda TradeCoach AI*\n\n"
             f"📋 Tu plan: {plan_texts['es']}\n\n"
             "─────────────────\n"
             "👤 *Perfil y Progreso*\n"
@@ -96,6 +112,14 @@ async def cmd_help(message: Message):
             "/psycho — Informe de sesgos\n"
             "/check — Verificación conductual\n\n"
             "─────────────────\n"
+            "🔔 *Notificaciones y Alertas*\n"
+            "/morning — 🌅 Brief diario del mercado\n"
+            "/alerte — Crear una alerta de precio\n"
+            "/alertes — Gestionar alertas activas\n\n"
+            "─────────────────\n"
+            "📚 *Educación*\n"
+            "/lexique — Términos de trading explicados\n\n"
+            "─────────────────\n"
             "💎 *Premium*\n"
             "/premium — Ver planes\n"
             "/activate — Activar tras el pago\n\n"
@@ -107,7 +131,7 @@ async def cmd_help(message: Message):
             "BTC, ETH, SOL, Oro, Plata y más."
         ),
         "pt": (
-            "❓ *Ajuda CryptoCoach*\n\n"
+            "❓ *Ajuda TradeCoach AI*\n\n"
             f"📋 Seu plano: {plan_texts['pt']}\n\n"
             "─────────────────\n"
             "👤 *Perfil e Progresso*\n"
@@ -124,6 +148,14 @@ async def cmd_help(message: Message):
             "/psycho — Relatório de vieses\n"
             "/check — Verificação comportamental\n\n"
             "─────────────────\n"
+            "🔔 *Notificações e Alertas*\n"
+            "/morning — 🌅 Brief diário do mercado\n"
+            "/alerte — Criar um alerta de preço\n"
+            "/alertes — Gerenciar alertas ativos\n\n"
+            "─────────────────\n"
+            "📚 *Educação*\n"
+            "/lexique — Termos de trading explicados\n\n"
+            "─────────────────\n"
             "💎 *Premium*\n"
             "/premium — Ver planos\n"
             "/activate — Ativar após pagamento\n\n"
@@ -136,7 +168,6 @@ async def cmd_help(message: Message):
         ),
     }
 
-    # Boutons rapides
     builder = InlineKeyboardBuilder()
 
     if not premium:
@@ -151,14 +182,9 @@ async def cmd_help(message: Message):
             callback_data="show_premium"
         )
 
-    support_labels = {
-        "fr": "📊 Analyser mes trades",
-        "en": "📊 Analyze my trades",
-        "es": "📊 Analizar mis trades",
-        "pt": "📊 Analisar meus trades",
-    }
     builder.button(
-        text=support_labels.get(lang, support_labels["en"]),
+        text={"fr": "📊 Analyser mes trades", "en": "📊 Analyze my trades",
+              "es": "📊 Analizar mis trades", "pt": "📊 Analisar meus trades"}.get(lang, "📊 Analyze my trades"),
         callback_data="show_trades"
     )
     builder.adjust(1)
@@ -171,6 +197,5 @@ async def cmd_help(message: Message):
 
 @router.message(Command("niveau"))
 async def cmd_niveau_alias(message: Message):
-    """Alias français pour /level."""
     from bot.gamification_handlers import cmd_level
     await cmd_level(message)
