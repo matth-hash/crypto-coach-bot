@@ -351,6 +351,7 @@ async def process_reason(message: Message, state: FSMContext):
     side_emoji = "🟢" if data["side"] == "buy" else "🔴"
     side_label = {"fr": "ACHAT", "en": "BUY", "es": "COMPRA", "pt": "COMPRA"}.get(lang, "BUY") if data["side"] == "buy" else {"fr": "VENTE", "en": "SELL", "es": "VENTA", "pt": "VENDA"}.get(lang, "SELL")
 
+    # Pré-calcul pour éviter les f-strings imbriquées
     pnl_line = ""
     if exit_price:
         if data["side"] == "buy":
@@ -362,12 +363,17 @@ async def process_reason(message: Message, state: FSMContext):
         pnl_emoji = "🟢" if pnl >= 0 else "🔴"
         pnl_line = f"\n💰 P&L : {pnl_emoji} ${pnl:+.2f} ({pnl_pct:+.1f}%)"
 
+    exit_fr = f"📤 Sortie : ${exit_price:,.2f}" if exit_price else "📤 Position : encore ouverte"
+    exit_en = f"📤 Exit: ${exit_price:,.2f}" if exit_price else "📤 Position: still open"
+    exit_es = f"📤 Salida: ${exit_price:,.2f}" if exit_price else "📤 Posición: aún abierta"
+    exit_pt = f"📤 Saída: ${exit_price:,.2f}" if exit_price else "📤 Posição: ainda aberta"
+
     summaries = {
         "fr": (
             f"✅ *Trade enregistré !*\n\n"
             f"{side_emoji} {side_label} {data['symbol']}\n"
             f"📥 Entrée : ${data['entry_price']:,.2f}\n"
-            f"{'📤 Sortie : $' + f\"{exit_price:,.2f}\" if exit_price else '📤 Position : encore ouverte'}"
+            f"{exit_fr}"
             f"{pnl_line}\n"
             f"💵 Montant : ${data['amount']:,.0f}\n"
             f"🧠 Émotion : {data['emotion']}\n\n"
@@ -377,7 +383,7 @@ async def process_reason(message: Message, state: FSMContext):
             f"✅ *Trade recorded!*\n\n"
             f"{side_emoji} {side_label} {data['symbol']}\n"
             f"📥 Entry: ${data['entry_price']:,.2f}\n"
-            f"{'📤 Exit: $' + f\"{exit_price:,.2f}\" if exit_price else '📤 Position: still open'}"
+            f"{exit_en}"
             f"{pnl_line}\n"
             f"💵 Amount: ${data['amount']:,.0f}\n"
             f"🧠 Emotion: {data['emotion']}\n\n"
@@ -387,7 +393,7 @@ async def process_reason(message: Message, state: FSMContext):
             f"✅ *¡Trade registrado!*\n\n"
             f"{side_emoji} {side_label} {data['symbol']}\n"
             f"📥 Entrada: ${data['entry_price']:,.2f}\n"
-            f"{'📤 Salida: $' + f\"{exit_price:,.2f}\" if exit_price else '📤 Posición: aún abierta'}"
+            f"{exit_es}"
             f"{pnl_line}\n"
             f"💵 Monto: ${data['amount']:,.0f}\n"
             f"🧠 Emoción: {data['emotion']}\n\n"
@@ -397,7 +403,7 @@ async def process_reason(message: Message, state: FSMContext):
             f"✅ *Trade registrado!*\n\n"
             f"{side_emoji} {side_label} {data['symbol']}\n"
             f"📥 Entrada: ${data['entry_price']:,.2f}\n"
-            f"{'📤 Saída: $' + f\"{exit_price:,.2f}\" if exit_price else '📤 Posição: ainda aberta'}"
+            f"{exit_pt}"
             f"{pnl_line}\n"
             f"💵 Valor: ${data['amount']:,.0f}\n"
             f"🧠 Emoção: {data['emotion']}\n\n"
