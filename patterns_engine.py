@@ -335,72 +335,62 @@ async def fetch_ohlcv_raw(exchange, symbol: str, timeframe: str) -> list:
 
 async def analyze_asset(symbol: str, timeframe: str, check_multitf: bool = True) -> dict | None:
     """Analyse complète d'un asset : patterns + indicateurs + score."""
-    exchange = None
     try:
-        exchange = ccxt_async.binance({"enableRateLimit": True})
+        async with ccxt_async.binance({"enableRateLimit": True}) as exchange:
+            ohlcv = await fetch_ohlcv_raw(exchange, symbol, timeframe)
+            if len(ohlcv) < 30:
+                return None
 
-        ohlcv = await fetch_ohlcv_raw(exchange, symbol, timeframe)
-        if len(ohlcv) < 30:
-            return None
+            highs  = [c[2] for c in ohlcv]
+            lows   = [c[3] for c in ohlcv]
+            closes = [c[4] for c in ohlcv]
+            vols   = [c[5] for c in ohlcv]
 
-        highs  = [c[2] for c in ohlcv]
-        lows   = [c[3] for c in ohlcv]
-        closes = [c[4] for c in ohlcv]
-        vols   = [c[5] for c in ohlcv]
+            rsi  = compute_rsi(closes)
+            macd = compute_macd(closes)
+            fib  = compute_fibonacci(highs, lows)
+            avg_vol = average_volume(vols)
+            vol_ratio = round(vols[-1] / avg_vol, 2) if avg_vol > 0 else 1.0
 
-        rsi  = compute_rsi(closes)
-        macd = compute_macd(closes)
-        fib  = compute_fibonacci(highs, lows)
-        avg_vol = average_volume(vols)
-        vol_ratio = round(vols[-1] / avg_vol, 2) if avg_vol > 0 else 1.0
+            pattern = (
+                detect_head_and_shoulders(highs, lows, closes) or
+                detect_double_top_bottom(highs, lows) or
+                detect_triangle(highs, lows, closes) or
+                detect_flag(highs, lows, closes, vols) or
+                detect_support_resistance(highs, lows, closes)
+            )
 
-        pattern = (
-            detect_head_and_shoulders(highs, lows, closes) or
-            detect_double_top_bottom(highs, lows) or
-            detect_triangle(highs, lows, closes) or
-            detect_flag(highs, lows, closes, vols) or
-            detect_support_resistance(highs, lows, closes)
-        )
+            # Vérification multi-timeframe — même instance exchange
+            multitf = False
+            if check_multitf and timeframe in ("H1", "H4"):
+                upper_tf = "D1" if timeframe == "H4" else "H4"
+                ohlcv_upper = await fetch_ohlcv_raw(exchange, symbol, upper_tf)
+                if len(ohlcv_upper) >= 30:
+                    h2 = [c[2] for c in ohlcv_upper]
+                    l2 = [c[3] for c in ohlcv_upper]
+                    c2 = [c[4] for c in ohlcv_upper]
+                    upper_pattern = (
+                        detect_head_and_shoulders(h2, l2, c2) or
+                        detect_double_top_bottom(h2, l2) or
+                        detect_triangle(h2, l2, c2)
+                    )
+                    if upper_pattern and upper_pattern.get("type") == pattern.get("type"):
+                        multitf = True
 
-        # Vérification multi-timeframe — même instance exchange
-        multitf = False
-        if check_multitf and timeframe in ("H1", "H4"):
-            upper_tf = "D1" if timeframe == "H4" else "H4"
-            ohlcv_upper = await fetch_ohlcv_raw(exchange, symbol, upper_tf)
-            if len(ohlcv_upper) >= 30:
-                h2 = [c[2] for c in ohlcv_upper]
-                l2 = [c[3] for c in ohlcv_upper]
-                c2 = [c[4] for c in ohlcv_upper]
-                upper_pattern = (
-                    detect_head_and_shoulders(h2, l2, c2) or
-                    detect_double_top_bottom(h2, l2) or
-                    detect_triangle(h2, l2, c2)
-                )
-                if upper_pattern and upper_pattern.get("type") == pattern.get("type"):
-                    multitf = True
+            stars = compute_reliability_score(pattern, rsi, macd, vols, multitf)
 
-        stars = compute_reliability_score(pattern, rsi, macd, vols, multitf)
-
-        return {
-            "symbol": symbol,
-            "timeframe": timeframe,
-            "pattern": pattern,
-            "rsi": rsi,
-            "macd": macd,
-            "fib": fib,
-            "vol_ratio": vol_ratio,
-            "multitf": multitf,
-            "stars": stars,
-            "current_price": closes[-1],
-        }
+            return {
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "pattern": pattern,
+                "rsi": rsi,
+                "macd": macd,
+                "fib": fib,
+                "vol_ratio": vol_ratio,
+                "multitf": multitf,
+                "stars": stars,
+                "current_price": closes[-1],
+            }
     except Exception as e:
         print(f"Erreur analyze_asset {symbol}/{timeframe}: {e}")
         return None
-    finally:
-        if exchange:
-            await exchange.close()
-            # Force fermeture session aiohttp sous-jacente
-            if hasattr(exchange, 'session') and exchange.session is not None:
-                await exchange.session.close()
-            if hasattr(exchange, 'connector') and exchange.connector is not None:
-                await exchange.connector.close()
