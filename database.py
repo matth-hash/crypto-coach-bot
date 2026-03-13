@@ -27,7 +27,6 @@ async def init_db():
             )
         """)
 
-        # Ajout colonne morning_time si elle n'existe pas encore
         await conn.execute("""
             ALTER TABLE users
             ADD COLUMN IF NOT EXISTS morning_time TEXT DEFAULT NULL
@@ -107,6 +106,24 @@ async def init_db():
             )
         """)
 
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS journal_trades (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT REFERENCES users(user_id),
+                symbol TEXT NOT NULL,
+                side TEXT NOT NULL,
+                entry_price DECIMAL NOT NULL,
+                exit_price DECIMAL DEFAULT NULL,
+                amount DECIMAL NOT NULL,
+                emotion TEXT NOT NULL,
+                reason TEXT NOT NULL,
+                pnl DECIMAL DEFAULT NULL,
+                pnl_pct DECIMAL DEFAULT NULL,
+                postmortem TEXT DEFAULT NULL,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+
     print("✅ Base de données initialisée !")
 
 # ─── Fonctions utilisateur ───────────────────────────────────────
@@ -141,12 +158,8 @@ async def create_user(user_id: int, username: str, language: str) -> dict:
 async def update_user_profile(user_id: int, **kwargs) -> None:
     if not kwargs:
         return
-
-    fields = ", ".join(
-        f"{key} = ${i+2}" for i, key in enumerate(kwargs.keys())
-    )
+    fields = ", ".join(f"{key} = ${i+2}" for i, key in enumerate(kwargs.keys()))
     values = list(kwargs.values())
-
     async with pool.acquire() as conn:
         await conn.execute(
             f"UPDATE users SET {fields}, last_active = NOW() WHERE user_id = $1",
@@ -179,15 +192,11 @@ async def get_conversation_history(user_id: int, limit: int = 20) -> list:
             ORDER BY created_at DESC
             LIMIT $2
         """, user_id, limit)
-
-        messages = [{"role": r["role"], "content": r["content"]} for r in reversed(rows)]
-        return messages
+        return [{"role": r["role"], "content": r["content"]} for r in reversed(rows)]
 
 async def clear_conversation_history(user_id: int) -> None:
     async with pool.acquire() as conn:
-        await conn.execute(
-            "DELETE FROM conversations WHERE user_id = $1", user_id
-        )
+        await conn.execute("DELETE FROM conversations WHERE user_id = $1", user_id)
 
 # ─── Fonctions profil psychologique ─────────────────────────────
 
@@ -206,11 +215,9 @@ async def add_bias(user_id: int, bias: str) -> None:
     profile = await get_psychological_profile(user_id)
     if not profile:
         return
-
     biases = profile["detected_biases"]
     if bias not in biases:
         biases.append(bias)
-
     async with pool.acquire() as conn:
         await conn.execute("""
             UPDATE psychological_profile
@@ -220,9 +227,7 @@ async def add_bias(user_id: int, bias: str) -> None:
 
 # ─── Fonctions exchange ──────────────────────────────────────────
 
-async def save_exchange_connection(
-    user_id: int, exchange: str, api_key: str, api_secret: str
-) -> None:
+async def save_exchange_connection(user_id: int, exchange: str, api_key: str, api_secret: str) -> None:
     async with pool.acquire() as conn:
         await conn.execute("""
             INSERT INTO exchange_connections (user_id, exchange, api_key, api_secret)
@@ -241,62 +246,45 @@ async def get_exchange_connection(user_id: int, exchange: str) -> dict | None:
 
 async def get_user_exchanges(user_id: int) -> list:
     async with pool.acquire() as conn:
-        rows = await conn.fetch("""
-            SELECT exchange FROM exchange_connections
-            WHERE user_id = $1
-        """, user_id)
+        rows = await conn.fetch("SELECT exchange FROM exchange_connections WHERE user_id = $1", user_id)
         return [r["exchange"] for r in rows]
 
-async def save_trade(
-    user_id: int, exchange: str, symbol: str,
-    side: str, amount: float, price: float,
-    pnl: float, trade_date, analysis: str = None
-) -> None:
+async def save_trade(user_id: int, exchange: str, symbol: str, side: str,
+                     amount: float, price: float, pnl: float, trade_date, analysis: str = None) -> None:
     async with pool.acquire() as conn:
         await conn.execute("""
-            INSERT INTO trades
-            (user_id, exchange, symbol, side, amount, price, pnl, trade_date, analysis)
+            INSERT INTO trades (user_id, exchange, symbol, side, amount, price, pnl, trade_date, analysis)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         """, user_id, exchange, symbol, side, amount, price, pnl, trade_date, analysis)
 
 async def get_recent_trades(user_id: int, limit: int = 10) -> list:
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
-            SELECT * FROM trades
-            WHERE user_id = $1
-            ORDER BY trade_date DESC
-            LIMIT $2
+            SELECT * FROM trades WHERE user_id = $1
+            ORDER BY trade_date DESC LIMIT $2
         """, user_id, limit)
         return [dict(r) for r in rows]
 
 async def delete_exchange_connection(user_id: int, exchange: str) -> None:
     async with pool.acquire() as conn:
         await conn.execute("""
-            DELETE FROM exchange_connections
-            WHERE user_id = $1 AND exchange = $2
+            DELETE FROM exchange_connections WHERE user_id = $1 AND exchange = $2
         """, user_id, exchange)
 
 # ─── Fonctions abonnement ────────────────────────────────────────
 
 async def get_subscription(user_id: int) -> dict | None:
     async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT * FROM subscriptions WHERE user_id = $1", user_id
-        )
+        row = await conn.fetchrow("SELECT * FROM subscriptions WHERE user_id = $1", user_id)
         return dict(row) if row else None
 
-async def create_or_update_subscription(
-    user_id: int,
-    plan: str,
-    stripe_customer_id: str = None,
-    stripe_subscription_id: str = None,
-    status: str = "active",
-    current_period_end=None
-) -> None:
+async def create_or_update_subscription(user_id: int, plan: str,
+    stripe_customer_id: str = None, stripe_subscription_id: str = None,
+    status: str = "active", current_period_end=None) -> None:
     async with pool.acquire() as conn:
         await conn.execute("""
-            INSERT INTO subscriptions 
-            (user_id, plan, stripe_customer_id, stripe_subscription_id, 
+            INSERT INTO subscriptions
+            (user_id, plan, stripe_customer_id, stripe_subscription_id,
              status, current_period_end, updated_at)
             VALUES ($1, $2, $3, $4, $5, $6, NOW())
             ON CONFLICT (user_id) DO UPDATE SET
@@ -306,8 +294,7 @@ async def create_or_update_subscription(
                 status = $5,
                 current_period_end = $6,
                 updated_at = NOW()
-        """, user_id, plan, stripe_customer_id,
-            stripe_subscription_id, status, current_period_end)
+        """, user_id, plan, stripe_customer_id, stripe_subscription_id, status, current_period_end)
 
 async def is_premium(user_id: int) -> bool:
     sub = await get_subscription(user_id)
@@ -319,8 +306,7 @@ async def get_daily_message_count(user_id: int) -> int:
     async with pool.acquire() as conn:
         row = await conn.fetchrow("""
             SELECT COUNT(*) as count FROM conversations
-            WHERE user_id = $1 
-            AND role = 'user'
+            WHERE user_id = $1 AND role = 'user'
             AND created_at >= NOW() - INTERVAL '24 hours'
         """, user_id)
         return row["count"] if row else 0
@@ -328,71 +314,104 @@ async def get_daily_message_count(user_id: int) -> int:
 # ─── Fonctions notifications matinales ──────────────────────────
 
 async def set_morning_time(user_id: int, time_str: str) -> None:
-    """Enregistre l'heure de notification matinale (format HH:MM)."""
     async with pool.acquire() as conn:
-        await conn.execute("""
-            UPDATE users SET morning_time = $2 WHERE user_id = $1
-        """, user_id, time_str)
+        await conn.execute("UPDATE users SET morning_time = $2 WHERE user_id = $1", user_id, time_str)
 
 async def get_users_for_morning_brief(current_time: str) -> list:
-    """Retourne les users dont l'heure de brief correspond à l'heure actuelle."""
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
             SELECT user_id, language, level, trading_style, goal
-            FROM users
-            WHERE morning_time = $1
+            FROM users WHERE morning_time = $1
         """, current_time)
         return [dict(r) for r in rows]
 
 # ─── Fonctions alertes de prix ───────────────────────────────────
 
-async def create_price_alert(
-    user_id: int, symbol: str, condition: str, target_price: float
-) -> int:
-    """Crée une alerte. condition = 'above' ou 'below'. Retourne l'id."""
+async def create_price_alert(user_id: int, symbol: str, condition: str, target_price: float) -> int:
     async with pool.acquire() as conn:
         row = await conn.fetchrow("""
             INSERT INTO price_alerts (user_id, symbol, condition, target_price)
-            VALUES ($1, $2, $3, $4)
-            RETURNING id
+            VALUES ($1, $2, $3, $4) RETURNING id
         """, user_id, symbol, condition, target_price)
         return row["id"]
 
 async def get_user_alerts(user_id: int) -> list:
-    """Retourne toutes les alertes actives d'un utilisateur."""
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
-            SELECT * FROM price_alerts
-            WHERE user_id = $1 AND active = TRUE
+            SELECT * FROM price_alerts WHERE user_id = $1 AND active = TRUE
             ORDER BY created_at DESC
         """, user_id)
         return [dict(r) for r in rows]
 
 async def get_all_active_alerts() -> list:
-    """Retourne toutes les alertes actives (pour le scheduler)."""
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
-            SELECT pa.*, u.language
-            FROM price_alerts pa
+            SELECT pa.*, u.language FROM price_alerts pa
             JOIN users u ON u.user_id = pa.user_id
             WHERE pa.active = TRUE
         """)
         return [dict(r) for r in rows]
 
 async def deactivate_alert(alert_id: int) -> None:
-    """Désactive une alerte après déclenchement ou suppression manuelle."""
     async with pool.acquire() as conn:
         await conn.execute("""
-            UPDATE price_alerts
-            SET active = FALSE, triggered_at = NOW()
-            WHERE id = $1
+            UPDATE price_alerts SET active = FALSE, triggered_at = NOW() WHERE id = $1
         """, alert_id)
 
 async def delete_alert(alert_id: int, user_id: int) -> bool:
-    """Supprime une alerte (vérifie que l'alerte appartient au user)."""
     async with pool.acquire() as conn:
         result = await conn.execute("""
-            DELETE FROM price_alerts
-            WHERE id = $1 AND user_id = $2
+            DELETE FROM price_alerts WHERE id = $1 AND user_id = $2
         """, alert_id, user_id)
+        return result == "DELETE 1"
+
+# ─── Fonctions journal de trading ────────────────────────────────
+
+async def save_journal_trade(
+    user_id: int, symbol: str, side: str,
+    entry_price: float, exit_price: float | None,
+    amount: float, emotion: str, reason: str
+) -> int:
+    """Enregistre un trade dans le journal. Retourne l'id."""
+    pnl = None
+    pnl_pct = None
+    if exit_price is not None and exit_price > 0:
+        if side == "buy":
+            pnl = (exit_price - entry_price) * amount
+            pnl_pct = ((exit_price - entry_price) / entry_price) * 100
+        else:
+            pnl = (entry_price - exit_price) * amount
+            pnl_pct = ((entry_price - exit_price) / entry_price) * 100
+
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("""
+            INSERT INTO journal_trades
+            (user_id, symbol, side, entry_price, exit_price, amount, emotion, reason, pnl, pnl_pct)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            RETURNING id
+        """, user_id, symbol, side, entry_price, exit_price, amount, emotion, reason, pnl, pnl_pct)
+        return row["id"]
+
+async def get_journal_trades(user_id: int, limit: int = 20) -> list:
+    """Retourne les derniers trades du journal."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT * FROM journal_trades WHERE user_id = $1
+            ORDER BY created_at DESC LIMIT $2
+        """, user_id, limit)
+        return [dict(r) for r in rows]
+
+async def save_postmortem(trade_id: int, postmortem: str) -> None:
+    """Sauvegarde le post-mortem IA d'un trade."""
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            UPDATE journal_trades SET postmortem = $2 WHERE id = $1
+        """, trade_id, postmortem)
+
+async def delete_journal_trade(trade_id: int, user_id: int) -> bool:
+    """Supprime un trade du journal."""
+    async with pool.acquire() as conn:
+        result = await conn.execute("""
+            DELETE FROM journal_trades WHERE id = $1 AND user_id = $2
+        """, trade_id, user_id)
         return result == "DELETE 1"
