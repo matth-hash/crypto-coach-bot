@@ -2,46 +2,13 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 from aiogram import Bot
-from pycoingecko import CoinGeckoAPI
 from database import get_users_for_morning_brief, get_all_active_alerts, deactivate_alert
 from ai_coach import get_coaching_response
+from market_data import get_crypto_prices, get_fear_greed_index, get_market_score
 
 logger = logging.getLogger(__name__)
-cg = CoinGeckoAPI()
 
-# ─── Données de marché ───────────────────────────────────────────
-
-async def fetch_market_data() -> dict:
-    """Récupère BTC, ETH, SOL et Fear & Greed via CoinGecko."""
-    try:
-        loop = asyncio.get_event_loop()
-        data = await loop.run_in_executor(None, lambda: cg.get_price(
-            ids=["bitcoin", "ethereum", "solana"],
-            vs_currencies=["usd"],
-            include_24hr_change=True
-        ))
-        fg = await loop.run_in_executor(None, lambda: cg.get_global())
-
-        btc = data.get("bitcoin", {})
-        eth = data.get("ethereum", {})
-        sol = data.get("solana", {})
-
-        # Fear & Greed approximé via market_cap_change_percentage_24h_usd
-        market_change = fg.get("data", {}).get("market_cap_change_percentage_24h_usd", 0)
-        fear_greed = max(0, min(100, int(50 + market_change * 2)))
-
-        return {
-            "btc_price": btc.get("usd", 0),
-            "btc_change": btc.get("usd_24h_change", 0),
-            "eth_price": eth.get("usd", 0),
-            "eth_change": eth.get("usd_24h_change", 0),
-            "sol_price": sol.get("usd", 0),
-            "sol_change": sol.get("usd_24h_change", 0),
-            "fear_greed": fear_greed,
-        }
-    except Exception as e:
-        logger.error(f"Erreur fetch_market_data: {e}")
-        return {}
+# ─── Helpers ────────────────────────────────────────────────────
 
 def format_change(change: float) -> str:
     arrow = "🟢" if change >= 0 else "🔴"
@@ -55,94 +22,101 @@ def fear_greed_label(score: int) -> str:
     if score <= 80:   return "😏 Avidité"
     return "🤑 Avidité Extrême"
 
-# ─── Message de brief matin ─────────────────────────────────────
+# ─── Brief matinal ───────────────────────────────────────────────
 
-async def build_morning_brief(user: dict, market: dict) -> str:
-    """Construit le brief personnalisé selon le profil utilisateur."""
+async def build_morning_brief(user: dict, prices: dict, fg: dict, market_score: dict) -> str:
     lang = user.get("language", "fr")
 
-    if not market:
+    btc = prices.get("BTC", {})
+    eth = prices.get("ETH", {})
+    sol = prices.get("SOL", {})
+
+    if not btc:
         fallback = {
             "fr": "🌅 Bonjour ! Les données de marché sont temporairement indisponibles. Bonne journée de trading ! 💪",
             "en": "🌅 Good morning! Market data is temporarily unavailable. Happy trading! 💪",
-            "es": "🌅 ¡Buenos días! Los datos del mercado no están disponibles temporalmente. ¡Buen trading! 💪",
-            "pt": "🌅 Bom dia! Os dados do mercado estão temporariamente indisponíveis. Bom trading! 💪",
+            "es": "🌅 ¡Buenos días! Los datos del mercado no están disponibles. ¡Buen trading! 💪",
+            "pt": "🌅 Bom dia! Os dados do mercado estão indisponíveis. Bom trading! 💪",
         }
         return fallback.get(lang, fallback["fr"])
 
-    fg_score = market["fear_greed"]
-    fg_label = fear_greed_label(fg_score)
+    fg_score = fg["value"]
+    fg_lbl = fear_greed_label(fg_score)
+    score = market_score.get("score", 50)
+    score_label = market_score.get("label", {}).get(lang, "🟡 Neutre")
 
-    # Prompt IA pour conseil personnalisé
+    # Conseil IA personnalisé
     prompt_map = {
         "fr": (
-            f"Données marché du jour : BTC={market['btc_price']:.0f}$ ({market['btc_change']:+.1f}%), "
-            f"ETH={market['eth_price']:.0f}$ ({market['eth_change']:+.1f}%), "
-            f"Fear&Greed={fg_score}/100. "
-            f"Profil trader : niveau={user.get('level')}, style={user.get('trading_style')}, objectif={user.get('goal')}. "
-            f"Génère un conseil de trading personnalisé en 2-3 phrases maximum. Sois direct et actionnable."
+            f"Données marché : BTC={btc.get('price', 0):.0f}$ ({btc.get('change_24h', 0):+.1f}%), "
+            f"ETH={eth.get('price', 0):.0f}$ ({eth.get('change_24h', 0):+.1f}%), "
+            f"Fear&Greed={fg_score}/100, Score marché={score}/100. "
+            f"Profil : niveau={user.get('level')}, style={user.get('trading_style')}, objectif={user.get('goal')}. "
+            f"Génère un conseil de trading personnalisé en 2-3 phrases. Sois direct et actionnable."
         ),
         "en": (
-            f"Market data: BTC={market['btc_price']:.0f}$ ({market['btc_change']:+.1f}%), "
-            f"ETH={market['eth_price']:.0f}$ ({market['eth_change']:+.1f}%), "
-            f"Fear&Greed={fg_score}/100. "
-            f"Trader profile: level={user.get('level')}, style={user.get('trading_style')}, goal={user.get('goal')}. "
-            f"Generate a personalized trading tip in 2-3 sentences max. Be direct and actionable."
+            f"Market data: BTC={btc.get('price', 0):.0f}$ ({btc.get('change_24h', 0):+.1f}%), "
+            f"ETH={eth.get('price', 0):.0f}$ ({eth.get('change_24h', 0):+.1f}%), "
+            f"Fear&Greed={fg_score}/100, Market score={score}/100. "
+            f"Profile: level={user.get('level')}, style={user.get('trading_style')}, goal={user.get('goal')}. "
+            f"Generate a personalized trading tip in 2-3 sentences. Be direct and actionable."
         ),
         "es": (
-            f"Datos del mercado: BTC={market['btc_price']:.0f}$ ({market['btc_change']:+.1f}%), "
-            f"ETH={market['eth_price']:.0f}$ ({market['eth_change']:+.1f}%), "
-            f"Fear&Greed={fg_score}/100. "
-            f"Perfil trader: nivel={user.get('level')}, estilo={user.get('trading_style')}, objetivo={user.get('goal')}. "
-            f"Genera un consejo de trading personalizado en 2-3 frases máximo. Sé directo y accionable."
+            f"Datos mercado: BTC={btc.get('price', 0):.0f}$ ({btc.get('change_24h', 0):+.1f}%), "
+            f"ETH={eth.get('price', 0):.0f}$ ({eth.get('change_24h', 0):+.1f}%), "
+            f"Fear&Greed={fg_score}/100, Score mercado={score}/100. "
+            f"Perfil: nivel={user.get('level')}, estilo={user.get('trading_style')}, objetivo={user.get('goal')}. "
+            f"Genera un consejo personalizado en 2-3 frases. Sé directo y accionable."
         ),
         "pt": (
-            f"Dados do mercado: BTC={market['btc_price']:.0f}$ ({market['btc_change']:+.1f}%), "
-            f"ETH={market['eth_price']:.0f}$ ({market['eth_change']:+.1f}%), "
-            f"Fear&Greed={fg_score}/100. "
-            f"Perfil trader: nível={user.get('level')}, estilo={user.get('trading_style')}, objetivo={user.get('goal')}. "
-            f"Gere uma dica de trading personalizada em 2-3 frases máximo. Seja direto e acionável."
+            f"Dados mercado: BTC={btc.get('price', 0):.0f}$ ({btc.get('change_24h', 0):+.1f}%), "
+            f"ETH={eth.get('price', 0):.0f}$ ({eth.get('change_24h', 0):+.1f}%), "
+            f"Fear&Greed={fg_score}/100, Score mercado={score}/100. "
+            f"Perfil: nível={user.get('level')}, estilo={user.get('trading_style')}, objetivo={user.get('goal')}. "
+            f"Gere uma dica personalizada em 2-3 frases. Seja direto e acionável."
         ),
     }
 
     try:
-        tip = await get_coaching_response(
-            prompt_map.get(lang, prompt_map["fr"]), lang, user, []
-        )
+        tip = await get_coaching_response(prompt_map.get(lang, prompt_map["fr"]), lang, user, [])
     except Exception:
         tip = ""
 
     templates = {
         "fr": (
             f"🌅 *Brief du matin*\n\n"
-            f"🟡 BTC : ${market['btc_price']:,.0f} {format_change(market['btc_change'])}\n"
-            f"🔵 ETH : ${market['eth_price']:,.0f} {format_change(market['eth_change'])}\n"
-            f"🟣 SOL : ${market['sol_price']:,.0f} {format_change(market['sol_change'])}\n\n"
-            f"😱 Fear & Greed : {fg_score}/100 — {fg_label}\n\n"
+            f"🟡 BTC : ${btc.get('price', 0):,.0f} {format_change(btc.get('change_24h', 0))}\n"
+            f"🔵 ETH : ${eth.get('price', 0):,.0f} {format_change(eth.get('change_24h', 0))}\n"
+            f"🟣 SOL : ${sol.get('price', 0):,.0f} {format_change(sol.get('change_24h', 0))}\n\n"
+            f"😱 Fear & Greed : {fg_score}/100 — {fg_lbl}\n"
+            f"📊 Score marché : {score}/100 — {score_label}\n\n"
             f"🧠 *Conseil du jour :*\n{tip}"
         ),
         "en": (
             f"🌅 *Morning Brief*\n\n"
-            f"🟡 BTC : ${market['btc_price']:,.0f} {format_change(market['btc_change'])}\n"
-            f"🔵 ETH : ${market['eth_price']:,.0f} {format_change(market['eth_change'])}\n"
-            f"🟣 SOL : ${market['sol_price']:,.0f} {format_change(market['sol_change'])}\n\n"
-            f"😱 Fear & Greed : {fg_score}/100 — {fg_label}\n\n"
+            f"🟡 BTC : ${btc.get('price', 0):,.0f} {format_change(btc.get('change_24h', 0))}\n"
+            f"🔵 ETH : ${eth.get('price', 0):,.0f} {format_change(eth.get('change_24h', 0))}\n"
+            f"🟣 SOL : ${sol.get('price', 0):,.0f} {format_change(sol.get('change_24h', 0))}\n\n"
+            f"😱 Fear & Greed : {fg_score}/100\n"
+            f"📊 Market Score : {score}/100 — {score_label}\n\n"
             f"🧠 *Tip of the day :*\n{tip}"
         ),
         "es": (
-            f"🌅 *Brief matutino*\n\n"
-            f"🟡 BTC : ${market['btc_price']:,.0f} {format_change(market['btc_change'])}\n"
-            f"🔵 ETH : ${market['eth_price']:,.0f} {format_change(market['eth_change'])}\n"
-            f"🟣 SOL : ${market['sol_price']:,.0f} {format_change(market['sol_change'])}\n\n"
-            f"😱 Fear & Greed : {fg_score}/100 — {fg_label}\n\n"
+            f"🌅 *Brief Matutino*\n\n"
+            f"🟡 BTC : ${btc.get('price', 0):,.0f} {format_change(btc.get('change_24h', 0))}\n"
+            f"🔵 ETH : ${eth.get('price', 0):,.0f} {format_change(eth.get('change_24h', 0))}\n"
+            f"🟣 SOL : ${sol.get('price', 0):,.0f} {format_change(sol.get('change_24h', 0))}\n\n"
+            f"😱 Fear & Greed : {fg_score}/100\n"
+            f"📊 Score mercado : {score}/100 — {score_label}\n\n"
             f"🧠 *Consejo del día :*\n{tip}"
         ),
         "pt": (
             f"🌅 *Brief da manhã*\n\n"
-            f"🟡 BTC : ${market['btc_price']:,.0f} {format_change(market['btc_change'])}\n"
-            f"🔵 ETH : ${market['eth_price']:,.0f} {format_change(market['eth_change'])}\n"
-            f"🟣 SOL : ${market['sol_price']:,.0f} {format_change(market['sol_change'])}\n\n"
-            f"😱 Fear & Greed : {fg_score}/100 — {fg_label}\n\n"
+            f"🟡 BTC : ${btc.get('price', 0):,.0f} {format_change(btc.get('change_24h', 0))}\n"
+            f"🔵 ETH : ${eth.get('price', 0):,.0f} {format_change(eth.get('change_24h', 0))}\n"
+            f"🟣 SOL : ${sol.get('price', 0):,.0f} {format_change(sol.get('change_24h', 0))}\n\n"
+            f"😱 Fear & Greed : {fg_score}/100\n"
+            f"📊 Score mercado : {score}/100 — {score_label}\n\n"
             f"🧠 *Dica do dia :*\n{tip}"
         ),
     }
@@ -151,33 +125,32 @@ async def build_morning_brief(user: dict, market: dict) -> str:
 # ─── Job : briefs matinaux ───────────────────────────────────────
 
 async def run_morning_briefs(bot: Bot):
-    """Tourne toutes les minutes, envoie les briefs à l'heure configurée."""
     while True:
         try:
             now = datetime.now(timezone.utc).strftime("%H:%M")
             users = await get_users_for_morning_brief(now)
 
             if users:
-                market = await fetch_market_data()
+                prices, fg, market_score = await asyncio.gather(
+                    get_crypto_prices(),
+                    get_fear_greed_index(),
+                    get_market_score(),
+                )
                 for user in users:
                     try:
-                        brief = await build_morning_brief(user, market)
-                        await bot.send_message(
-                            user["user_id"], brief, parse_mode="Markdown"
-                        )
+                        brief = await build_morning_brief(user, prices, fg, market_score)
+                        await bot.send_message(user["user_id"], brief, parse_mode="Markdown")
                         logger.info(f"Brief envoyé à {user['user_id']}")
                     except Exception as e:
                         logger.error(f"Erreur envoi brief {user['user_id']}: {e}")
-
         except Exception as e:
             logger.error(f"Erreur run_morning_briefs: {e}")
 
-        await asyncio.sleep(60)  # Vérifie toutes les minutes
+        await asyncio.sleep(60)
 
 # ─── Job : alertes de prix ───────────────────────────────────────
 
 async def run_price_alerts(bot: Bot):
-    """Tourne toutes les 5 minutes, vérifie les alertes actives."""
     while True:
         try:
             alerts = await get_all_active_alerts()
@@ -185,20 +158,14 @@ async def run_price_alerts(bot: Bot):
                 await asyncio.sleep(300)
                 continue
 
-            market = await fetch_market_data()
-            if not market:
+            prices = await get_crypto_prices()
+            if not prices:
                 await asyncio.sleep(300)
                 continue
 
-            prices = {
-                "BTC": market["btc_price"],
-                "ETH": market["eth_price"],
-                "SOL": market["sol_price"],
-            }
-
             for alert in alerts:
                 symbol = alert["symbol"].upper().replace("/USDT", "").replace("/USD", "")
-                current_price = prices.get(symbol)
+                current_price = prices.get(symbol, {}).get("price")
                 if current_price is None:
                     continue
 
@@ -212,8 +179,8 @@ async def run_price_alerts(bot: Bot):
                 if triggered:
                     await deactivate_alert(alert["id"])
                     lang = alert.get("language", "fr")
-
                     direction = ">" if alert["condition"] == "above" else "<"
+
                     messages = {
                         "fr": (
                             f"🔔 *Alerte déclenchée !*\n\n"
@@ -252,4 +219,4 @@ async def run_price_alerts(bot: Bot):
         except Exception as e:
             logger.error(f"Erreur run_price_alerts: {e}")
 
-        await asyncio.sleep(300)  # Vérifie toutes les 5 minutes
+        await asyncio.sleep(300)
