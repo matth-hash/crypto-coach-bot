@@ -124,6 +124,22 @@ async def init_db():
             )
         """)
 
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS detected_patterns (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT REFERENCES users(user_id),
+                symbol TEXT NOT NULL,
+                timeframe TEXT NOT NULL,
+                pattern_name TEXT NOT NULL,
+                pattern_type TEXT NOT NULL,
+                stars INTEGER DEFAULT 1,
+                neckline DECIMAL DEFAULT NULL,
+                target DECIMAL DEFAULT NULL,
+                confirmed BOOLEAN DEFAULT NULL,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+
     print("✅ Base de données initialisée !")
 
 # ─── Fonctions utilisateur ───────────────────────────────────────
@@ -415,3 +431,27 @@ async def delete_journal_trade(trade_id: int, user_id: int) -> bool:
             DELETE FROM journal_trades WHERE id = $1 AND user_id = $2
         """, trade_id, user_id)
         return result == "DELETE 1"
+
+# ─── Fonctions patterns ──────────────────────────────────────────
+
+async def save_detected_pattern(
+    user_id: int, symbol: str, timeframe: str,
+    pattern_name: str, pattern_type: str,
+    stars: int, neckline: float = None, target: float = None
+) -> int:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("""
+            INSERT INTO detected_patterns
+            (user_id, symbol, timeframe, pattern_name, pattern_type, stars, neckline, target)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            RETURNING id
+        """, user_id, symbol, timeframe, pattern_name, pattern_type, stars, neckline, target)
+        return row["id"]
+
+async def get_user_patterns(user_id: int, limit: int = 10) -> list:
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT * FROM detected_patterns WHERE user_id = $1
+            ORDER BY created_at DESC LIMIT $2
+        """, user_id, limit)
+        return [dict(r) for r in rows]
