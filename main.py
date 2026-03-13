@@ -14,6 +14,7 @@ from bot.lexique_handlers import router as lexique_router
 from bot.morning_handlers import router as morning_router
 from bot.alerts_handlers import router as alerts_router
 from bot.journal_handlers import router as journal_router
+from bot.patterns_handlers import router as patterns_router
 from database import init_db
 from scheduler import run_morning_briefs, run_price_alerts
 from payments import start_webhook_server
@@ -35,6 +36,7 @@ async def main():
     dp.include_router(morning_router)
     dp.include_router(alerts_router)
     dp.include_router(journal_router)
+    dp.include_router(patterns_router)
     dp.include_router(callback_router)
     dp.include_router(main_router)
 
