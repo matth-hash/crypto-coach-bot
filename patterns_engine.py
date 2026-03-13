@@ -1,5 +1,5 @@
 import asyncio
-import ccxt.async_support as ccxt_async
+import yfinance as yf
 from datetime import datetime, timezone
 
 # ─── Récupération OHLCV ──────────────────────────────────────────
@@ -7,20 +7,8 @@ from datetime import datetime, timezone
 TIMEFRAME_MAP = {"H1": "1h", "H4": "4h", "D1": "1d"}
 CANDLES_NEEDED = 100
 
-# Singleton Binance — une seule session aiohttp pour toute la durée de vie du bot
-_ohlcv_exchange = None
-
-async def get_exchange():
-    global _ohlcv_exchange
-    if _ohlcv_exchange is None:
-        _ohlcv_exchange = ccxt_async.bybit({"enableRateLimit": True})
-    return _ohlcv_exchange
-
 async def close_exchange():
-    global _ohlcv_exchange
-    if _ohlcv_exchange is not None:
-        await _ohlcv_exchange.close()
-        _ohlcv_exchange = None
+    pass  # Plus nécessaire avec yfinance
 
 # ─── Indicateurs techniques ──────────────────────────────────────
 
@@ -338,82 +326,93 @@ def compute_reliability_score(pattern: dict, rsi: float, macd: dict, volumes: li
 
 # ─── Analyse complète ────────────────────────────────────────────
 
-async def fetch_ohlcv_raw(exchange, symbol: str, timeframe: str) -> list:
-    """Fetch OHLCV en réutilisant une instance exchange existante."""
-    tf = TIMEFRAME_MAP.get(timeframe, "4h")
-    # Essaie spot USDT en premier, puis perp linéaire
-    pairs_to_try = [f"{symbol}/USDT", f"{symbol}/USDT:USDT"]
-    for pair in pairs_to_try:
-        try:
-            data = await exchange.fetch_ohlcv(pair, tf, limit=CANDLES_NEEDED)
-            if data:
-                return data
-        except Exception:
-            continue
-    print(f"Erreur OHLCV {symbol}/{timeframe}: aucun pair disponible")
-    return []
+def _fetch_ohlcv_sync(symbol: str, timeframe: str) -> list:
+    """Fetch OHLCV via yfinance (synchrone, exécuté dans un thread)."""
+    tf_map = {"H1": "1h", "H4": "4h", "D1": "1d"}
+    period_map = {"H1": "7d", "H4": "60d", "D1": "180d"}
+    tf = tf_map.get(timeframe, "4h")
+    period = period_map.get(timeframe, "60d")
+    ticker = f"{symbol}-USD"
+    try:
+        df = yf.Ticker(ticker).history(period=period, interval=tf)
+        if df.empty:
+            return []
+        result = []
+        for ts, row in df.iterrows():
+            result.append([
+                int(ts.timestamp() * 1000),
+                float(row["Open"]),
+                float(row["High"]),
+                float(row["Low"]),
+                float(row["Close"]),
+                float(row["Volume"]),
+            ])
+        return result[-CANDLES_NEEDED:]
+    except Exception as e:
+        print(f"Erreur yfinance {symbol}/{timeframe}: {e}")
+        return []
+
+async def fetch_ohlcv_raw(symbol: str, timeframe: str) -> list:
+    """Fetch OHLCV async via yfinance dans un thread séparé."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _fetch_ohlcv_sync, symbol, timeframe)
 
 async def analyze_asset(symbol: str, timeframe: str, check_multitf: bool = True) -> dict | None:
     """Analyse complète d'un asset : patterns + indicateurs + score."""
     try:
-        exchange = await get_exchange()
-        try:
-            ohlcv = await fetch_ohlcv_raw(exchange, symbol, timeframe)
-            if len(ohlcv) < 30:
-                return None
-
-            highs  = [c[2] for c in ohlcv]
-            lows   = [c[3] for c in ohlcv]
-            closes = [c[4] for c in ohlcv]
-            vols   = [c[5] for c in ohlcv]
-
-            rsi  = compute_rsi(closes)
-            macd = compute_macd(closes)
-            fib  = compute_fibonacci(highs, lows)
-            avg_vol = average_volume(vols)
-            vol_ratio = round(vols[-1] / avg_vol, 2) if avg_vol > 0 else 1.0
-
-            pattern = (
-                detect_head_and_shoulders(highs, lows, closes) or
-                detect_double_top_bottom(highs, lows) or
-                detect_triangle(highs, lows, closes) or
-                detect_flag(highs, lows, closes, vols) or
-                detect_support_resistance(highs, lows, closes)
-            )
-
-            multitf = False
-            if check_multitf and timeframe in ("H1", "H4"):
-                upper_tf = "D1" if timeframe == "H4" else "H4"
-                ohlcv_upper = await fetch_ohlcv_raw(exchange, symbol, upper_tf)
-                if len(ohlcv_upper) >= 30:
-                    h2 = [c[2] for c in ohlcv_upper]
-                    l2 = [c[3] for c in ohlcv_upper]
-                    c2 = [c[4] for c in ohlcv_upper]
-                    upper_pattern = (
-                        detect_head_and_shoulders(h2, l2, c2) or
-                        detect_double_top_bottom(h2, l2) or
-                        detect_triangle(h2, l2, c2)
-                    )
-                    if upper_pattern and upper_pattern.get("type") == pattern.get("type"):
-                        multitf = True
-
-            stars = compute_reliability_score(pattern, rsi, macd, vols, multitf)
-
-            return {
-                "symbol": symbol,
-                "timeframe": timeframe,
-                "pattern": pattern,
-                "rsi": rsi,
-                "macd": macd,
-                "fib": fib,
-                "vol_ratio": vol_ratio,
-                "multitf": multitf,
-                "stars": stars,
-                "current_price": closes[-1],
-            }
-        except Exception as e:
-            print(f"Erreur analyze_asset {symbol}/{timeframe}: {e}")
+        ohlcv = await fetch_ohlcv_raw(symbol, timeframe)
+        if len(ohlcv) < 30:
             return None
+
+        highs  = [c[2] for c in ohlcv]
+        lows   = [c[3] for c in ohlcv]
+        closes = [c[4] for c in ohlcv]
+        vols   = [c[5] for c in ohlcv]
+
+        rsi  = compute_rsi(closes)
+        macd = compute_macd(closes)
+        fib  = compute_fibonacci(highs, lows)
+        avg_vol = average_volume(vols)
+        vol_ratio = round(vols[-1] / avg_vol, 2) if avg_vol > 0 else 1.0
+
+        pattern = (
+            detect_head_and_shoulders(highs, lows, closes) or
+            detect_double_top_bottom(highs, lows) or
+            detect_triangle(highs, lows, closes) or
+            detect_flag(highs, lows, closes, vols) or
+            detect_support_resistance(highs, lows, closes)
+        )
+
+        multitf = False
+        if check_multitf and timeframe in ("H1", "H4"):
+            upper_tf = "D1" if timeframe == "H4" else "H4"
+            ohlcv_upper = await fetch_ohlcv_raw(symbol, upper_tf)
+            if len(ohlcv_upper) >= 30:
+                h2 = [c[2] for c in ohlcv_upper]
+                l2 = [c[3] for c in ohlcv_upper]
+                c2 = [c[4] for c in ohlcv_upper]
+                upper_pattern = (
+                    detect_head_and_shoulders(h2, l2, c2) or
+                    detect_double_top_bottom(h2, l2) or
+                    detect_triangle(h2, l2, c2)
+                )
+                if upper_pattern and upper_pattern.get("type") == pattern.get("type"):
+                    multitf = True
+
+        stars = compute_reliability_score(pattern, rsi, macd, vols, multitf)
+
+        return {
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "pattern": pattern,
+            "rsi": rsi,
+            "macd": macd,
+            "fib": fib,
+            "vol_ratio": vol_ratio,
+            "multitf": multitf,
+            "stars": stars,
+            "current_price": closes[-1],
+        }
     except Exception as e:
-        print(f"Erreur get_exchange: {e}")
+        print(f"Erreur analyze_asset {symbol}/{timeframe}: {e}")
         return None
