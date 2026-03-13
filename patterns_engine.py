@@ -8,19 +8,19 @@ TIMEFRAME_MAP = {"H1": "1h", "H4": "4h", "D1": "1d"}
 CANDLES_NEEDED = 100
 
 # Singleton Binance — une seule session aiohttp pour toute la durée de vie du bot
-_binance_exchange = None
+_ohlcv_exchange = None
 
 async def get_exchange():
-    global _binance_exchange
-    if _binance_exchange is None:
-        _binance_exchange = ccxt_async.binance({"enableRateLimit": True})
-    return _binance_exchange
+    global _ohlcv_exchange
+    if _ohlcv_exchange is None:
+        _ohlcv_exchange = ccxt_async.bybit({"enableRateLimit": True})
+    return _ohlcv_exchange
 
 async def close_exchange():
-    global _binance_exchange
-    if _binance_exchange is not None:
-        await _binance_exchange.close()
-        _binance_exchange = None
+    global _ohlcv_exchange
+    if _ohlcv_exchange is not None:
+        await _ohlcv_exchange.close()
+        _ohlcv_exchange = None
 
 # ─── Indicateurs techniques ──────────────────────────────────────
 
@@ -340,13 +340,18 @@ def compute_reliability_score(pattern: dict, rsi: float, macd: dict, volumes: li
 
 async def fetch_ohlcv_raw(exchange, symbol: str, timeframe: str) -> list:
     """Fetch OHLCV en réutilisant une instance exchange existante."""
-    try:
-        tf = TIMEFRAME_MAP.get(timeframe, "4h")
-        pair = f"{symbol}/USDT"
-        return await exchange.fetch_ohlcv(pair, tf, limit=CANDLES_NEEDED)
-    except Exception as e:
-        print(f"Erreur OHLCV {symbol}/{timeframe}: {e}")
-        return []
+    tf = TIMEFRAME_MAP.get(timeframe, "4h")
+    # Essaie spot USDT en premier, puis perp linéaire
+    pairs_to_try = [f"{symbol}/USDT", f"{symbol}/USDT:USDT"]
+    for pair in pairs_to_try:
+        try:
+            data = await exchange.fetch_ohlcv(pair, tf, limit=CANDLES_NEEDED)
+            if data:
+                return data
+        except Exception:
+            continue
+    print(f"Erreur OHLCV {symbol}/{timeframe}: aucun pair disponible")
+    return []
 
 async def analyze_asset(symbol: str, timeframe: str, check_multitf: bool = True) -> dict | None:
     """Analyse complète d'un asset : patterns + indicateurs + score."""
