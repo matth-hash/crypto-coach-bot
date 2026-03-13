@@ -15,6 +15,7 @@ from bot.morning_handlers import router as morning_router
 from bot.alerts_handlers import router as alerts_router
 from database import init_db
 from scheduler import run_morning_briefs, run_price_alerts
+from payments import start_webhook_server
 
 logging.basicConfig(level=logging.INFO)
 
@@ -38,6 +39,7 @@ async def main():
     # Jobs en arrière-plan
     asyncio.create_task(run_morning_briefs(bot))
     asyncio.create_task(run_price_alerts(bot))
+    asyncio.create_task(start_webhook_server())
 
     print("🚀 TradeCoach Bot démarré !")
     await dp.start_polling(bot)
