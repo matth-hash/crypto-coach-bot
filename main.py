@@ -45,7 +45,11 @@ async def main():
     asyncio.create_task(start_webhook_server())
 
     print("🚀 TradeCoach Bot démarré !")
-    await dp.start_polling(bot)
+    try:
+        await dp.start_polling(bot)
+    finally:
+        from patterns_engine import close_exchange
+        await close_exchange()
 
 if __name__ == "__main__":
     asyncio.run(main())
