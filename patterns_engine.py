@@ -1,5 +1,5 @@
 import asyncio
-import yfinance as yf
+import aiohttp
 from datetime import datetime, timezone
 
 # ─── Récupération OHLCV ──────────────────────────────────────────
@@ -8,7 +8,7 @@ TIMEFRAME_MAP = {"H1": "1h", "H4": "4h", "D1": "1d"}
 CANDLES_NEEDED = 100
 
 async def close_exchange():
-    pass  # Plus nécessaire avec yfinance
+    pass  # Pas de session persistante
 
 # ─── Indicateurs techniques ──────────────────────────────────────
 
@@ -326,36 +326,57 @@ def compute_reliability_score(pattern: dict, rsi: float, macd: dict, volumes: li
 
 # ─── Analyse complète ────────────────────────────────────────────
 
-def _fetch_ohlcv_sync(symbol: str, timeframe: str) -> list:
-    """Fetch OHLCV via yfinance (synchrone, exécuté dans un thread)."""
-    tf_map = {"H1": "1h", "H4": "4h", "D1": "1d"}
-    period_map = {"H1": "7d", "H4": "60d", "D1": "180d"}
-    tf = tf_map.get(timeframe, "4h")
-    period = period_map.get(timeframe, "60d")
-    ticker = f"{symbol}-USD"
-    try:
-        df = yf.Ticker(ticker).history(period=period, interval=tf)
-        if df.empty:
-            return []
-        result = []
-        for ts, row in df.iterrows():
-            result.append([
-                int(ts.timestamp() * 1000),
-                float(row["Open"]),
-                float(row["High"]),
-                float(row["Low"]),
-                float(row["Close"]),
-                float(row["Volume"]),
-            ])
-        return result[-CANDLES_NEEDED:]
-    except Exception as e:
-        print(f"Erreur yfinance {symbol}/{timeframe}: {e}")
-        return []
-
 async def fetch_ohlcv_raw(symbol: str, timeframe: str) -> list:
-    """Fetch OHLCV async via yfinance dans un thread séparé."""
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, _fetch_ohlcv_sync, symbol, timeframe)
+    """Fetch OHLCV via CryptoCompare — pas de restriction géographique."""
+    BASE = "https://min-api.cryptocompare.com/data/v2"
+    try:
+        if timeframe == "D1":
+            url = f"{BASE}/histoday?fsym={symbol}&tsym=USD&limit={CANDLES_NEEDED}"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                    if resp.status != 200:
+                        return []
+                    data = await resp.json()
+                    candles = data.get("Data", {}).get("Data", [])
+                    return [[c["time"]*1000, c["open"], c["high"], c["low"], c["close"], c["volumefrom"]] for c in candles if c["close"] > 0]
+
+        elif timeframe == "H4":
+            # Récupère 400 bougies horaires puis agrège par 4
+            url = f"{BASE}/histohour?fsym={symbol}&tsym=USD&limit=400"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                    if resp.status != 200:
+                        return []
+                    data = await resp.json()
+                    hourly = data.get("Data", {}).get("Data", [])
+                    hourly = [c for c in hourly if c["close"] > 0]
+                    # Agrège par groupe de 4
+                    aggregated = []
+                    for i in range(0, len(hourly) - 3, 4):
+                        group = hourly[i:i+4]
+                        aggregated.append([
+                            group[0]["time"] * 1000,
+                            group[0]["open"],
+                            max(c["high"] for c in group),
+                            min(c["low"] for c in group),
+                            group[-1]["close"],
+                            sum(c["volumefrom"] for c in group),
+                        ])
+                    return aggregated[-CANDLES_NEEDED:]
+
+        else:  # H1
+            url = f"{BASE}/histohour?fsym={symbol}&tsym=USD&limit={CANDLES_NEEDED}"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                    if resp.status != 200:
+                        return []
+                    data = await resp.json()
+                    candles = data.get("Data", {}).get("Data", [])
+                    return [[c["time"]*1000, c["open"], c["high"], c["low"], c["close"], c["volumefrom"]] for c in candles if c["close"] > 0]
+
+    except Exception as e:
+        print(f"Erreur CryptoCompare {symbol}/{timeframe}: {e}")
+        return []
 
 async def analyze_asset(symbol: str, timeframe: str, check_multitf: bool = True) -> dict | None:
     """Analyse complète d'un asset : patterns + indicateurs + score."""
