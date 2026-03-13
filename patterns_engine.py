@@ -399,3 +399,8 @@ async def analyze_asset(symbol: str, timeframe: str, check_multitf: bool = True)
     finally:
         if exchange:
             await exchange.close()
+            # Force fermeture session aiohttp sous-jacente
+            if hasattr(exchange, 'session') and exchange.session is not None:
+                await exchange.session.close()
+            if hasattr(exchange, 'connector') and exchange.connector is not None:
+                await exchange.connector.close()
