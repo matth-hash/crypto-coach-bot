@@ -1,5 +1,4 @@
 import asyncio
-import aiohttp
 import ccxt.async_support as ccxt_async
 from datetime import datetime, timezone
 
@@ -7,6 +6,21 @@ from datetime import datetime, timezone
 
 TIMEFRAME_MAP = {"H1": "1h", "H4": "4h", "D1": "1d"}
 CANDLES_NEEDED = 100
+
+# Singleton Binance — une seule session aiohttp pour toute la durée de vie du bot
+_binance_exchange = None
+
+async def get_exchange():
+    global _binance_exchange
+    if _binance_exchange is None:
+        _binance_exchange = ccxt_async.binance({"enableRateLimit": True})
+    return _binance_exchange
+
+async def close_exchange():
+    global _binance_exchange
+    if _binance_exchange is not None:
+        await _binance_exchange.close()
+        _binance_exchange = None
 
 # ─── Indicateurs techniques ──────────────────────────────────────
 
@@ -336,13 +350,9 @@ async def fetch_ohlcv_raw(exchange, symbol: str, timeframe: str) -> list:
 
 async def analyze_asset(symbol: str, timeframe: str, check_multitf: bool = True) -> dict | None:
     """Analyse complète d'un asset : patterns + indicateurs + score."""
-    connector = aiohttp.TCPConnector(force_close=True)
     try:
-        async with ccxt_async.binance({
-            "enableRateLimit": True,
-            "aiohttp_connector": connector,
-            "aiohttp_connector_owner": False,
-        }) as exchange:
+        exchange = await get_exchange()
+        try:
             ohlcv = await fetch_ohlcv_raw(exchange, symbol, timeframe)
             if len(ohlcv) < 30:
                 return None
@@ -366,7 +376,6 @@ async def analyze_asset(symbol: str, timeframe: str, check_multitf: bool = True)
                 detect_support_resistance(highs, lows, closes)
             )
 
-            # Vérification multi-timeframe — même instance exchange
             multitf = False
             if check_multitf and timeframe in ("H1", "H4"):
                 upper_tf = "D1" if timeframe == "H4" else "H4"
@@ -397,8 +406,9 @@ async def analyze_asset(symbol: str, timeframe: str, check_multitf: bool = True)
                 "stars": stars,
                 "current_price": closes[-1],
             }
+        except Exception as e:
+            print(f"Erreur analyze_asset {symbol}/{timeframe}: {e}")
+            return None
     except Exception as e:
-        print(f"Erreur analyze_asset {symbol}/{timeframe}: {e}")
+        print(f"Erreur get_exchange: {e}")
         return None
-    finally:
-        await connector.close()
