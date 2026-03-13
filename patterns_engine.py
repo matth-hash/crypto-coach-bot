@@ -1,4 +1,5 @@
 import asyncio
+import aiohttp
 import ccxt.async_support as ccxt_async
 from datetime import datetime, timezone
 
@@ -335,8 +336,13 @@ async def fetch_ohlcv_raw(exchange, symbol: str, timeframe: str) -> list:
 
 async def analyze_asset(symbol: str, timeframe: str, check_multitf: bool = True) -> dict | None:
     """Analyse complète d'un asset : patterns + indicateurs + score."""
+    connector = aiohttp.TCPConnector(force_close=True)
     try:
-        async with ccxt_async.binance({"enableRateLimit": True}) as exchange:
+        async with ccxt_async.binance({
+            "enableRateLimit": True,
+            "aiohttp_connector": connector,
+            "aiohttp_connector_owner": False,
+        }) as exchange:
             ohlcv = await fetch_ohlcv_raw(exchange, symbol, timeframe)
             if len(ohlcv) < 30:
                 return None
@@ -394,3 +400,5 @@ async def analyze_asset(symbol: str, timeframe: str, check_multitf: bool = True)
     except Exception as e:
         print(f"Erreur analyze_asset {symbol}/{timeframe}: {e}")
         return None
+    finally:
+        await connector.close()
