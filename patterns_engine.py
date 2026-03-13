@@ -7,23 +7,6 @@ from datetime import datetime, timezone
 TIMEFRAME_MAP = {"H1": "1h", "H4": "4h", "D1": "1d"}
 CANDLES_NEEDED = 100
 
-async def fetch_ohlcv(symbol: str, timeframe: str) -> list:
-    """Récupère les bougies via Binance public (pas de clé API requise)."""
-    exchange = None
-    try:
-        exchange = ccxt_async.binance({"enableRateLimit": True})
-        tf = TIMEFRAME_MAP.get(timeframe, "4h")
-        pair = f"{symbol}/USDT"
-        ohlcv = await exchange.fetch_ohlcv(pair, tf, limit=CANDLES_NEEDED)
-        # [timestamp, open, high, low, close, volume]
-        return ohlcv
-    except Exception as e:
-        print(f"Erreur OHLCV {symbol}/{timeframe}: {e}")
-        return []
-    finally:
-        if exchange:
-            await exchange.close()
-
 # ─── Indicateurs techniques ──────────────────────────────────────
 
 def compute_rsi(closes: list, period: int = 14) -> float:
