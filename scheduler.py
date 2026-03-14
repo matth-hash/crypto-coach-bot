@@ -2,13 +2,12 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 from aiogram import Bot
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 from database import get_users_for_morning_brief, get_all_active_alerts, deactivate_alert
 from ai_coach import get_coaching_response
 from market_data import get_crypto_prices, get_fear_greed_index, get_market_score
 
 logger = logging.getLogger(__name__)
-
-# ─── Helpers ────────────────────────────────────────────────────
 
 def format_change(change: float) -> str:
     arrow = "🟢" if change >= 0 else "🔴"
@@ -26,7 +25,6 @@ def fear_greed_label(score: int) -> str:
 
 async def build_morning_brief(user: dict, prices: dict, fg: dict, market_score: dict) -> str:
     lang = user.get("language", "fr")
-
     btc = prices.get("BTC", {})
     eth = prices.get("ETH", {})
     sol = prices.get("SOL", {})
@@ -45,7 +43,6 @@ async def build_morning_brief(user: dict, prices: dict, fg: dict, market_score: 
     score = market_score.get("score", 50)
     score_label = market_score.get("label", {}).get(lang, "🟡 Neutre")
 
-    # Conseil IA personnalisé
     prompt_map = {
         "fr": (
             f"Données marché : BTC={btc.get('price', 0):.0f}$ ({btc.get('change_24h', 0):+.1f}%), "
@@ -129,26 +126,21 @@ async def run_morning_briefs(bot: Bot):
         try:
             now = datetime.now(timezone.utc).strftime("%H:%M")
             users = await get_users_for_morning_brief(now)
-
             if users:
                 prices, fg, market_score = await asyncio.gather(
-                    get_crypto_prices(),
-                    get_fear_greed_index(),
-                    get_market_score(),
+                    get_crypto_prices(), get_fear_greed_index(), get_market_score(),
                 )
                 for user in users:
                     try:
                         brief = await build_morning_brief(user, prices, fg, market_score)
                         await bot.send_message(user["user_id"], brief, parse_mode="Markdown")
-                        logger.info(f"Brief envoyé à {user['user_id']}")
                     except Exception as e:
-                        logger.error(f"Erreur envoi brief {user['user_id']}: {e}")
+                        logger.error(f"Erreur brief {user['user_id']}: {e}")
         except Exception as e:
             logger.error(f"Erreur run_morning_briefs: {e}")
-
         await asyncio.sleep(60)
 
-# ─── Job : alertes de prix ───────────────────────────────────────
+# ─── Job : alertes de prix + rappel journal ──────────────────────
 
 async def run_price_alerts(bot: Bot):
     while True:
@@ -181,36 +173,67 @@ async def run_price_alerts(bot: Bot):
                     lang = alert.get("language", "fr")
                     direction = ">" if alert["condition"] == "above" else "<"
 
+                    # Message principal
                     messages = {
                         "fr": (
                             f"🔔 *Alerte déclenchée !*\n\n"
-                            f"{symbol} a atteint ${current_price:,.0f}\n"
+                            f"*{symbol}* a atteint ${current_price:,.0f}\n"
                             f"Ton objectif était : {direction} ${target:,.0f}\n\n"
-                            f"💡 Analyse la situation avant d'agir."
+                            f"💡 Analyse la situation avant d'agir.\n\n"
+                            f"*Tu as pris le trade ?*"
                         ),
                         "en": (
                             f"🔔 *Alert triggered!*\n\n"
-                            f"{symbol} reached ${current_price:,.0f}\n"
+                            f"*{symbol}* reached ${current_price:,.0f}\n"
                             f"Your target was: {direction} ${target:,.0f}\n\n"
-                            f"💡 Analyze the situation before acting."
+                            f"💡 Analyze the situation before acting.\n\n"
+                            f"*Did you take the trade?*"
                         ),
                         "es": (
                             f"🔔 *¡Alerta activada!*\n\n"
-                            f"{symbol} ha alcanzado ${current_price:,.0f}\n"
+                            f"*{symbol}* ha alcanzado ${current_price:,.0f}\n"
                             f"Tu objetivo era: {direction} ${target:,.0f}\n\n"
-                            f"💡 Analiza la situación antes de actuar."
+                            f"💡 Analiza la situación antes de actuar.\n\n"
+                            f"*¿Tomaste el trade?*"
                         ),
                         "pt": (
                             f"🔔 *Alerta disparado!*\n\n"
-                            f"{symbol} atingiu ${current_price:,.0f}\n"
+                            f"*{symbol}* atingiu ${current_price:,.0f}\n"
                             f"Seu alvo era: {direction} ${target:,.0f}\n\n"
-                            f"💡 Analise a situação antes de agir."
+                            f"💡 Analise a situação antes de agir.\n\n"
+                            f"*Você entrou no trade?*"
                         ),
                     }
+
+                    # Boutons rappel journal
+                    builder = InlineKeyboardBuilder()
+                    journal_labels = {
+                        "fr": f"📓 Journaliser {symbol}",
+                        "en": f"📓 Log {symbol} trade",
+                        "es": f"📓 Registrar {symbol}",
+                        "pt": f"📓 Registrar {symbol}",
+                    }
+                    ignore_labels = {
+                        "fr": "⏭ Ignorer",
+                        "en": "⏭ Skip",
+                        "es": "⏭ Ignorar",
+                        "pt": "⏭ Ignorar",
+                    }
+                    builder.button(
+                        text=journal_labels.get(lang, journal_labels["fr"]),
+                        callback_data=f"alert_journal:{symbol}"
+                    )
+                    builder.button(
+                        text=ignore_labels.get(lang, ignore_labels["fr"]),
+                        callback_data="alert_journal_skip"
+                    )
+                    builder.adjust(1)
+
                     try:
                         await bot.send_message(
                             alert["user_id"],
                             messages.get(lang, messages["fr"]),
+                            reply_markup=builder.as_markup(),
                             parse_mode="Markdown"
                         )
                     except Exception as e:
@@ -218,5 +241,4 @@ async def run_price_alerts(bot: Bot):
 
         except Exception as e:
             logger.error(f"Erreur run_price_alerts: {e}")
-
         await asyncio.sleep(300)
