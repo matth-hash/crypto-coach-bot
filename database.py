@@ -26,12 +26,9 @@ async def init_db():
                 created_at TIMESTAMP DEFAULT NOW()
             )
         """)
-
         await conn.execute("""
-            ALTER TABLE users
-            ADD COLUMN IF NOT EXISTS morning_time TEXT DEFAULT NULL
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS morning_time TEXT DEFAULT NULL
         """)
-
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS conversations (
                 id SERIAL PRIMARY KEY,
@@ -41,7 +38,6 @@ async def init_db():
                 created_at TIMESTAMP DEFAULT NOW()
             )
         """)
-
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS psychological_profile (
                 user_id BIGINT PRIMARY KEY REFERENCES users(user_id),
@@ -52,7 +48,6 @@ async def init_db():
                 updated_at TIMESTAMP DEFAULT NOW()
             )
         """)
-
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS exchange_connections (
                 user_id BIGINT REFERENCES users(user_id),
@@ -63,7 +58,6 @@ async def init_db():
                 PRIMARY KEY (user_id, exchange)
             )
         """)
-
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS trades (
                 id SERIAL PRIMARY KEY,
@@ -79,7 +73,6 @@ async def init_db():
                 created_at TIMESTAMP DEFAULT NOW()
             )
         """)
-
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS subscriptions (
                 user_id BIGINT PRIMARY KEY REFERENCES users(user_id),
@@ -92,7 +85,6 @@ async def init_db():
                 updated_at TIMESTAMP DEFAULT NOW()
             )
         """)
-
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS price_alerts (
                 id SERIAL PRIMARY KEY,
@@ -105,7 +97,6 @@ async def init_db():
                 created_at TIMESTAMP DEFAULT NOW()
             )
         """)
-
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS journal_trades (
                 id SERIAL PRIMARY KEY,
@@ -123,7 +114,6 @@ async def init_db():
                 created_at TIMESTAMP DEFAULT NOW()
             )
         """)
-
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS detected_patterns (
                 id SERIAL PRIMARY KEY,
@@ -139,6 +129,15 @@ async def init_db():
                 created_at TIMESTAMP DEFAULT NOW()
             )
         """)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS daily_usage (
+                user_id BIGINT REFERENCES users(user_id),
+                date DATE NOT NULL DEFAULT CURRENT_DATE,
+                patterns_count INTEGER DEFAULT 0,
+                postmortem_count INTEGER DEFAULT 0,
+                PRIMARY KEY (user_id, date)
+            )
+        """)
 
     print("✅ Base de données initialisée !")
 
@@ -146,29 +145,21 @@ async def init_db():
 
 async def get_user(user_id: int) -> dict | None:
     async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT * FROM users WHERE user_id = $1", user_id
-        )
-        if row:
-            return dict(row)
-        return None
+        row = await conn.fetchrow("SELECT * FROM users WHERE user_id = $1", user_id)
+        return dict(row) if row else None
 
 async def create_user(user_id: int, username: str, language: str) -> dict:
     async with pool.acquire() as conn:
         row = await conn.fetchrow("""
             INSERT INTO users (user_id, username, language)
             VALUES ($1, $2, $3)
-            ON CONFLICT (user_id) DO UPDATE
-            SET username = $2, last_active = NOW()
+            ON CONFLICT (user_id) DO UPDATE SET username = $2, last_active = NOW()
             RETURNING *
         """, user_id, username, language)
-
         await conn.execute("""
-            INSERT INTO psychological_profile (user_id)
-            VALUES ($1)
+            INSERT INTO psychological_profile (user_id) VALUES ($1)
             ON CONFLICT (user_id) DO NOTHING
         """, user_id)
-
         return dict(row)
 
 async def update_user_profile(user_id: int, **kwargs) -> None:
@@ -186,8 +177,7 @@ async def update_xp(user_id: int, points: int = 10) -> int:
     async with pool.acquire() as conn:
         row = await conn.fetchrow("""
             UPDATE users SET xp = xp + $2, last_active = NOW()
-            WHERE user_id = $1
-            RETURNING xp
+            WHERE user_id = $1 RETURNING xp
         """, user_id, points)
         return row["xp"]
 
@@ -196,17 +186,14 @@ async def update_xp(user_id: int, points: int = 10) -> int:
 async def save_message(user_id: int, role: str, content: str) -> None:
     async with pool.acquire() as conn:
         await conn.execute("""
-            INSERT INTO conversations (user_id, role, content)
-            VALUES ($1, $2, $3)
+            INSERT INTO conversations (user_id, role, content) VALUES ($1, $2, $3)
         """, user_id, role, content)
 
 async def get_conversation_history(user_id: int, limit: int = 20) -> list:
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
             SELECT role, content FROM conversations
-            WHERE user_id = $1
-            ORDER BY created_at DESC
-            LIMIT $2
+            WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2
         """, user_id, limit)
         return [{"role": r["role"], "content": r["content"]} for r in reversed(rows)]
 
@@ -236,8 +223,7 @@ async def add_bias(user_id: int, bias: str) -> None:
         biases.append(bias)
     async with pool.acquire() as conn:
         await conn.execute("""
-            UPDATE psychological_profile
-            SET detected_biases = $2, updated_at = NOW()
+            UPDATE psychological_profile SET detected_biases = $2, updated_at = NOW()
             WHERE user_id = $1
         """, user_id, json.dumps(biases))
 
@@ -248,15 +234,13 @@ async def save_exchange_connection(user_id: int, exchange: str, api_key: str, ap
         await conn.execute("""
             INSERT INTO exchange_connections (user_id, exchange, api_key, api_secret)
             VALUES ($1, $2, $3, $4)
-            ON CONFLICT (user_id, exchange) DO UPDATE
-            SET api_key = $3, api_secret = $4
+            ON CONFLICT (user_id, exchange) DO UPDATE SET api_key = $3, api_secret = $4
         """, user_id, exchange, api_key, api_secret)
 
 async def get_exchange_connection(user_id: int, exchange: str) -> dict | None:
     async with pool.acquire() as conn:
         row = await conn.fetchrow("""
-            SELECT * FROM exchange_connections
-            WHERE user_id = $1 AND exchange = $2
+            SELECT * FROM exchange_connections WHERE user_id = $1 AND exchange = $2
         """, user_id, exchange)
         return dict(row) if row else None
 
@@ -276,8 +260,7 @@ async def save_trade(user_id: int, exchange: str, symbol: str, side: str,
 async def get_recent_trades(user_id: int, limit: int = 10) -> list:
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
-            SELECT * FROM trades WHERE user_id = $1
-            ORDER BY trade_date DESC LIMIT $2
+            SELECT * FROM trades WHERE user_id = $1 ORDER BY trade_date DESC LIMIT $2
         """, user_id, limit)
         return [dict(r) for r in rows]
 
@@ -300,8 +283,7 @@ async def create_or_update_subscription(user_id: int, plan: str,
     async with pool.acquire() as conn:
         await conn.execute("""
             INSERT INTO subscriptions
-            (user_id, plan, stripe_customer_id, stripe_subscription_id,
-             status, current_period_end, updated_at)
+            (user_id, plan, stripe_customer_id, stripe_subscription_id, status, current_period_end, updated_at)
             VALUES ($1, $2, $3, $4, $5, $6, NOW())
             ON CONFLICT (user_id) DO UPDATE SET
                 plan = $2,
@@ -359,6 +341,14 @@ async def get_user_alerts(user_id: int) -> list:
         """, user_id)
         return [dict(r) for r in rows]
 
+async def count_active_alerts(user_id: int) -> int:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("""
+            SELECT COUNT(*) as count FROM price_alerts
+            WHERE user_id = $1 AND active = TRUE
+        """, user_id)
+        return row["count"] if row else 0
+
 async def get_all_active_alerts() -> list:
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
@@ -388,7 +378,6 @@ async def save_journal_trade(
     entry_price: float, exit_price: float | None,
     amount: float, emotion: str, reason: str
 ) -> int:
-    """Enregistre un trade dans le journal. Retourne l'id."""
     pnl = None
     pnl_pct = None
     if exit_price is not None and exit_price > 0:
@@ -398,7 +387,6 @@ async def save_journal_trade(
         else:
             pnl = (entry_price - exit_price) * amount
             pnl_pct = ((entry_price - exit_price) / entry_price) * 100
-
     async with pool.acquire() as conn:
         row = await conn.fetchrow("""
             INSERT INTO journal_trades
@@ -409,7 +397,6 @@ async def save_journal_trade(
         return row["id"]
 
 async def get_journal_trades(user_id: int, limit: int = 20) -> list:
-    """Retourne les derniers trades du journal."""
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
             SELECT * FROM journal_trades WHERE user_id = $1
@@ -418,14 +405,10 @@ async def get_journal_trades(user_id: int, limit: int = 20) -> list:
         return [dict(r) for r in rows]
 
 async def save_postmortem(trade_id: int, postmortem: str) -> None:
-    """Sauvegarde le post-mortem IA d'un trade."""
     async with pool.acquire() as conn:
-        await conn.execute("""
-            UPDATE journal_trades SET postmortem = $2 WHERE id = $1
-        """, trade_id, postmortem)
+        await conn.execute("UPDATE journal_trades SET postmortem = $2 WHERE id = $1", trade_id, postmortem)
 
 async def delete_journal_trade(trade_id: int, user_id: int) -> bool:
-    """Supprime un trade du journal."""
     async with pool.acquire() as conn:
         result = await conn.execute("""
             DELETE FROM journal_trades WHERE id = $1 AND user_id = $2
@@ -455,3 +438,54 @@ async def get_user_patterns(user_id: int, limit: int = 10) -> list:
             ORDER BY created_at DESC LIMIT $2
         """, user_id, limit)
         return [dict(r) for r in rows]
+
+# ─── Fonctions limites freemium (daily_usage) ────────────────────
+
+FREE_LIMITS = {
+    "patterns": 3,
+    "postmortem": 1,
+    "alerts": 3,
+}
+
+async def get_daily_usage(user_id: int) -> dict:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("""
+            SELECT * FROM daily_usage WHERE user_id = $1 AND date = CURRENT_DATE
+        """, user_id)
+        if row:
+            return dict(row)
+        return {"patterns_count": 0, "postmortem_count": 0}
+
+async def increment_daily_usage(user_id: int, feature: str) -> int:
+    """feature : 'patterns' ou 'postmortem'. Retourne le nouveau compteur."""
+    col = f"{feature}_count"
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(f"""
+            INSERT INTO daily_usage (user_id, date, {col})
+            VALUES ($1, CURRENT_DATE, 1)
+            ON CONFLICT (user_id, date) DO UPDATE
+            SET {col} = daily_usage.{col} + 1
+            RETURNING {col}
+        """, user_id)
+        return row[col]
+
+async def check_free_limit(user_id: int, feature: str) -> dict:
+    """
+    Vérifie si un user free peut encore utiliser une feature.
+    Retourne {"allowed": bool, "used": int, "limit": int}
+    """
+    from database import is_premium
+    premium = await is_premium(user_id)
+    if premium:
+        return {"allowed": True, "used": 0, "limit": -1}
+
+    if feature == "alerts":
+        used = await count_active_alerts(user_id)
+        limit = FREE_LIMITS["alerts"]
+        return {"allowed": used < limit, "used": used, "limit": limit}
+
+    usage = await get_daily_usage(user_id)
+    col = f"{feature}_count"
+    used = usage.get(col, 0)
+    limit = FREE_LIMITS.get(feature, 999)
+    return {"allowed": used < limit, "used": used, "limit": limit}
