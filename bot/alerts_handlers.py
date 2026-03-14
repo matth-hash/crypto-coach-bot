@@ -1,244 +1,262 @@
-import asyncio
-import logging
-from datetime import datetime, timezone
-from aiogram import Bot
+from aiogram import Router, F
+from aiogram.types import Message, CallbackQuery
+from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from database import get_users_for_morning_brief, get_all_active_alerts, deactivate_alert
-from ai_coach import get_coaching_response
-from market_data import get_crypto_prices, get_fear_greed_index, get_market_score
+from database import get_user, create_price_alert, get_user_alerts, delete_alert, check_free_limit
 
-logger = logging.getLogger(__name__)
+router = Router()
 
-def format_change(change: float) -> str:
-    arrow = "🟢" if change >= 0 else "🔴"
-    sign = "+" if change >= 0 else ""
-    return f"{arrow} {sign}{change:.1f}%"
+SUPPORTED_SYMBOLS = ["BTC", "ETH", "SOL"]
 
-def fear_greed_label(score: int) -> str:
-    if score <= 20:   return "😱 Peur Extrême"
-    if score <= 40:   return "😟 Peur"
-    if score <= 60:   return "😐 Neutre"
-    if score <= 80:   return "😏 Avidité"
-    return "🤑 Avidité Extrême"
+class AlertSetup(StatesGroup):
+    waiting_symbol = State()
+    waiting_condition = State()
+    waiting_price = State()
 
-# ─── Brief matinal ───────────────────────────────────────────────
+# ─── Upgrade message helper ───────────────────────────────────────
 
-async def build_morning_brief(user: dict, prices: dict, fg: dict, market_score: dict) -> str:
-    lang = user.get("language", "fr")
-    btc = prices.get("BTC", {})
-    eth = prices.get("ETH", {})
-    sol = prices.get("SOL", {})
-
-    if not btc:
-        fallback = {
-            "fr": "🌅 Bonjour ! Les données de marché sont temporairement indisponibles. Bonne journée de trading ! 💪",
-            "en": "🌅 Good morning! Market data is temporarily unavailable. Happy trading! 💪",
-            "es": "🌅 ¡Buenos días! Los datos del mercado no están disponibles. ¡Buen trading! 💪",
-            "pt": "🌅 Bom dia! Os dados do mercado estão indisponíveis. Bom trading! 💪",
-        }
-        return fallback.get(lang, fallback["fr"])
-
-    fg_score = fg["value"]
-    fg_lbl = fear_greed_label(fg_score)
-    score = market_score.get("score", 50)
-    score_label = market_score.get("label", {}).get(lang, "🟡 Neutre")
-
-    prompt_map = {
+def _upgrade_msg(lang: str, feature: str, used: int, limit: int) -> str:
+    msgs = {
         "fr": (
-            f"Données marché : BTC={btc.get('price', 0):.0f}$ ({btc.get('change_24h', 0):+.1f}%), "
-            f"ETH={eth.get('price', 0):.0f}$ ({eth.get('change_24h', 0):+.1f}%), "
-            f"Fear&Greed={fg_score}/100, Score marché={score}/100. "
-            f"Profil : niveau={user.get('level')}, style={user.get('trading_style')}, objectif={user.get('goal')}. "
-            f"Génère un conseil de trading personnalisé en 2-3 phrases. Sois direct et actionnable."
+            f"⛔ *Limite atteinte* ({used}/{limit} alertes actives)\n\n"
+            f"Le plan gratuit est limité à *{limit} alertes actives*.\n"
+            f"Passe Premium pour des alertes illimitées ! 🚀\n\n"
+            f"/premium — Voir les offres"
         ),
         "en": (
-            f"Market data: BTC={btc.get('price', 0):.0f}$ ({btc.get('change_24h', 0):+.1f}%), "
-            f"ETH={eth.get('price', 0):.0f}$ ({eth.get('change_24h', 0):+.1f}%), "
-            f"Fear&Greed={fg_score}/100, Market score={score}/100. "
-            f"Profile: level={user.get('level')}, style={user.get('trading_style')}, goal={user.get('goal')}. "
-            f"Generate a personalized trading tip in 2-3 sentences. Be direct and actionable."
+            f"⛔ *Limit reached* ({used}/{limit} active alerts)\n\n"
+            f"The free plan is limited to *{limit} active alerts*.\n"
+            f"Upgrade to Premium for unlimited alerts! 🚀\n\n"
+            f"/premium — View plans"
         ),
         "es": (
-            f"Datos mercado: BTC={btc.get('price', 0):.0f}$ ({btc.get('change_24h', 0):+.1f}%), "
-            f"ETH={eth.get('price', 0):.0f}$ ({eth.get('change_24h', 0):+.1f}%), "
-            f"Fear&Greed={fg_score}/100, Score mercado={score}/100. "
-            f"Perfil: nivel={user.get('level')}, estilo={user.get('trading_style')}, objetivo={user.get('goal')}. "
-            f"Genera un consejo personalizado en 2-3 frases. Sé directo y accionable."
+            f"⛔ *Límite alcanzado* ({used}/{limit} alertas activas)\n\n"
+            f"El plan gratuito está limitado a *{limit} alertas activas*.\n"
+            f"¡Actualiza a Premium para alertas ilimitadas! 🚀\n\n"
+            f"/premium — Ver planes"
         ),
         "pt": (
-            f"Dados mercado: BTC={btc.get('price', 0):.0f}$ ({btc.get('change_24h', 0):+.1f}%), "
-            f"ETH={eth.get('price', 0):.0f}$ ({eth.get('change_24h', 0):+.1f}%), "
-            f"Fear&Greed={fg_score}/100, Score mercado={score}/100. "
-            f"Perfil: nível={user.get('level')}, estilo={user.get('trading_style')}, objetivo={user.get('goal')}. "
-            f"Gere uma dica personalizada em 2-3 frases. Seja direto e acionável."
+            f"⛔ *Limite atingido* ({used}/{limit} alertas ativos)\n\n"
+            f"O plano gratuito é limitado a *{limit} alertas ativos*.\n"
+            f"Atualize para Premium para alertas ilimitados! 🚀\n\n"
+            f"/premium — Ver planos"
         ),
     }
+    return msgs.get(lang, msgs["en"])
+
+# ─── /alerte ─────────────────────────────────────────────────────
+
+@router.message(Command("alerte"))
+async def cmd_alerte(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    user = await get_user(user_id)
+    lang = user["language"] if user else "fr"
+
+    # Gate freemium
+    limit_check = await check_free_limit(user_id, "alerts")
+    if not limit_check["allowed"]:
+        await message.answer(
+            _upgrade_msg(lang, "alerts", limit_check["used"], limit_check["limit"]),
+            parse_mode="Markdown"
+        )
+        return
+
+    await state.update_data(language=lang)
+
+    builder = InlineKeyboardBuilder()
+    for symbol in SUPPORTED_SYMBOLS:
+        builder.button(text=f"🪙 {symbol}", callback_data=f"alert_symbol:{symbol}")
+    builder.adjust(3)
+
+    texts = {
+        "fr": "🔔 *Nouvelle alerte de prix*\n\nSur quelle crypto veux-tu une alerte ?",
+        "en": "🔔 *New price alert*\n\nWhich crypto do you want an alert on?",
+        "es": "🔔 *Nueva alerta de precio*\n\n¿En qué cripto quieres una alerta?",
+        "pt": "🔔 *Novo alerta de preço*\n\nEm qual cripto você quer um alerta?",
+    }
+    await message.answer(texts.get(lang, texts["fr"]), reply_markup=builder.as_markup(), parse_mode="Markdown")
+    await state.set_state(AlertSetup.waiting_symbol)
+
+@router.callback_query(AlertSetup.waiting_symbol, F.data.startswith("alert_symbol:"))
+async def cb_alert_symbol(callback: CallbackQuery, state: FSMContext):
+    symbol = callback.data.split(":")[1]
+    data = await state.get_data()
+    lang = data.get("language", "fr")
+    await state.update_data(symbol=symbol)
+
+    builder = InlineKeyboardBuilder()
+    labels = {
+        "fr": [("📈 Au-dessus de", "above"), ("📉 En-dessous de", "below")],
+        "en": [("📈 Above", "above"), ("📉 Below", "below")],
+        "es": [("📈 Por encima de", "above"), ("📉 Por debajo de", "below")],
+        "pt": [("📈 Acima de", "above"), ("📉 Abaixo de", "below")],
+    }
+    for text, data_val in labels.get(lang, labels["fr"]):
+        builder.button(text=text, callback_data=f"alert_condition:{data_val}")
+    builder.adjust(2)
+
+    texts = {
+        "fr": f"🪙 *{symbol}* sélectionné.\n\nCondition de l'alerte :",
+        "en": f"🪙 *{symbol}* selected.\n\nAlert condition:",
+        "es": f"🪙 *{symbol}* seleccionado.\n\nCondición de la alerta:",
+        "pt": f"🪙 *{symbol}* selecionado.\n\nCondição do alerta:",
+    }
+    await callback.message.edit_text(texts.get(lang, texts["fr"]), reply_markup=builder.as_markup(), parse_mode="Markdown")
+    await state.set_state(AlertSetup.waiting_condition)
+    await callback.answer()
+
+@router.callback_query(AlertSetup.waiting_condition, F.data.startswith("alert_condition:"))
+async def cb_alert_condition(callback: CallbackQuery, state: FSMContext):
+    condition = callback.data.split(":")[1]
+    data = await state.get_data()
+    lang = data.get("language", "fr")
+    symbol = data.get("symbol")
+    await state.update_data(condition=condition)
+
+    direction = {
+        "fr": "au-dessus de" if condition == "above" else "en-dessous de",
+        "en": "above" if condition == "above" else "below",
+        "es": "por encima de" if condition == "above" else "por debajo de",
+        "pt": "acima de" if condition == "above" else "abaixo de",
+    }
+    texts = {
+        "fr": f"📊 Alerte quand *{symbol}* passe *{direction['fr']}*...\n\nEnvoie le prix cible en $ _(ex: 75000)_ :",
+        "en": f"📊 Alert when *{symbol}* goes *{direction['en']}*...\n\nSend the target price in $ _(e.g. 75000)_ :",
+        "es": f"📊 Alerta cuando *{symbol}* pase *{direction['es']}*...\n\nEnvía el precio objetivo en $ _(ej: 75000)_ :",
+        "pt": f"📊 Alerta quando *{symbol}* passar *{direction['pt']}*...\n\nEnvie o preço alvo em $ _(ex: 75000)_ :",
+    }
+    await callback.message.edit_text(texts.get(lang, texts["fr"]), parse_mode="Markdown")
+    await state.set_state(AlertSetup.waiting_price)
+    await callback.answer()
+
+@router.message(AlertSetup.waiting_price)
+async def process_alert_price(message: Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get("language", "fr")
+    symbol = data.get("symbol")
+    condition = data.get("condition")
 
     try:
-        tip = await get_coaching_response(prompt_map.get(lang, prompt_map["fr"]), lang, user, [])
-    except Exception:
-        tip = ""
+        price = float(message.text.strip().replace(",", ".").replace(" ", ""))
+        if price <= 0:
+            raise ValueError
+    except ValueError:
+        errors = {
+            "fr": "❌ Prix invalide. Envoie un nombre comme *75000* ou *2500.50*",
+            "en": "❌ Invalid price. Send a number like *75000* or *2500.50*",
+            "es": "❌ Precio inválido. Envía un número como *75000* o *2500.50*",
+            "pt": "❌ Preço inválido. Envie um número como *75000* ou *2500.50*",
+        }
+        await message.answer(errors.get(lang, errors["fr"]), parse_mode="Markdown")
+        return
 
-    templates = {
-        "fr": (
-            f"🌅 *Brief du matin*\n\n"
-            f"🟡 BTC : ${btc.get('price', 0):,.0f} {format_change(btc.get('change_24h', 0))}\n"
-            f"🔵 ETH : ${eth.get('price', 0):,.0f} {format_change(eth.get('change_24h', 0))}\n"
-            f"🟣 SOL : ${sol.get('price', 0):,.0f} {format_change(sol.get('change_24h', 0))}\n\n"
-            f"😱 Fear & Greed : {fg_score}/100 — {fg_lbl}\n"
-            f"📊 Score marché : {score}/100 — {score_label}\n\n"
-            f"🧠 *Conseil du jour :*\n{tip}"
-        ),
-        "en": (
-            f"🌅 *Morning Brief*\n\n"
-            f"🟡 BTC : ${btc.get('price', 0):,.0f} {format_change(btc.get('change_24h', 0))}\n"
-            f"🔵 ETH : ${eth.get('price', 0):,.0f} {format_change(eth.get('change_24h', 0))}\n"
-            f"🟣 SOL : ${sol.get('price', 0):,.0f} {format_change(sol.get('change_24h', 0))}\n\n"
-            f"😱 Fear & Greed : {fg_score}/100\n"
-            f"📊 Market Score : {score}/100 — {score_label}\n\n"
-            f"🧠 *Tip of the day :*\n{tip}"
-        ),
-        "es": (
-            f"🌅 *Brief Matutino*\n\n"
-            f"🟡 BTC : ${btc.get('price', 0):,.0f} {format_change(btc.get('change_24h', 0))}\n"
-            f"🔵 ETH : ${eth.get('price', 0):,.0f} {format_change(eth.get('change_24h', 0))}\n"
-            f"🟣 SOL : ${sol.get('price', 0):,.0f} {format_change(sol.get('change_24h', 0))}\n\n"
-            f"😱 Fear & Greed : {fg_score}/100\n"
-            f"📊 Score mercado : {score}/100 — {score_label}\n\n"
-            f"🧠 *Consejo del día :*\n{tip}"
-        ),
-        "pt": (
-            f"🌅 *Brief da manhã*\n\n"
-            f"🟡 BTC : ${btc.get('price', 0):,.0f} {format_change(btc.get('change_24h', 0))}\n"
-            f"🔵 ETH : ${eth.get('price', 0):,.0f} {format_change(eth.get('change_24h', 0))}\n"
-            f"🟣 SOL : ${sol.get('price', 0):,.0f} {format_change(sol.get('change_24h', 0))}\n\n"
-            f"😱 Fear & Greed : {fg_score}/100\n"
-            f"📊 Score mercado : {score}/100 — {score_label}\n\n"
-            f"🧠 *Dica do dia :*\n{tip}"
-        ),
+    user_id = message.from_user.id
+    await create_price_alert(user_id, symbol, condition, price)
+    await state.clear()
+
+    direction = {
+        "fr": "passe au-dessus de" if condition == "above" else "passe en-dessous de",
+        "en": "goes above" if condition == "above" else "goes below",
+        "es": "supere" if condition == "above" else "caiga por debajo de",
+        "pt": "subir acima de" if condition == "above" else "cair abaixo de",
     }
-    return templates.get(lang, templates["fr"])
+    success = {
+        "fr": f"✅ *Alerte créée !*\n\n🪙 {symbol} {direction['fr']} *${price:,.0f}*\n🔔 Tu seras notifié dès que le prix atteint cet objectif.\n\nGère tes alertes avec /alertes",
+        "en": f"✅ *Alert created!*\n\n🪙 {symbol} {direction['en']} *${price:,.0f}*\n🔔 You'll be notified when the price hits this target.\n\nManage your alerts with /alertes",
+        "es": f"✅ *¡Alerta creada!*\n\n🪙 {symbol} {direction['es']} *${price:,.0f}*\n🔔 Te notificaremos cuando el precio alcance este objetivo.\n\nGestiona tus alertas con /alertes",
+        "pt": f"✅ *Alerta criado!*\n\n🪙 {symbol} {direction['pt']} *${price:,.0f}*\n🔔 Você será notificado quando o preço atingir este alvo.\n\nGerencie seus alertas com /alertes",
+    }
+    await message.answer(success.get(lang, success["fr"]), parse_mode="Markdown")
 
-# ─── Job : briefs matinaux ───────────────────────────────────────
+# ─── /alertes ────────────────────────────────────────────────────
 
-async def run_morning_briefs(bot: Bot):
-    while True:
-        try:
-            now = datetime.now(timezone.utc).strftime("%H:%M")
-            users = await get_users_for_morning_brief(now)
-            if users:
-                prices, fg, market_score = await asyncio.gather(
-                    get_crypto_prices(), get_fear_greed_index(), get_market_score(),
-                )
-                for user in users:
-                    try:
-                        brief = await build_morning_brief(user, prices, fg, market_score)
-                        await bot.send_message(user["user_id"], brief, parse_mode="Markdown")
-                    except Exception as e:
-                        logger.error(f"Erreur brief {user['user_id']}: {e}")
-        except Exception as e:
-            logger.error(f"Erreur run_morning_briefs: {e}")
-        await asyncio.sleep(60)
+@router.message(Command("alertes"))
+async def cmd_alertes(message: Message):
+    user_id = message.from_user.id
+    user = await get_user(user_id)
+    lang = user["language"] if user else "fr"
+    alerts = await get_user_alerts(user_id)
 
-# ─── Job : alertes de prix + rappel journal ──────────────────────
+    if not alerts:
+        empty = {
+            "fr": "🔕 Aucune alerte active.\n\nCrée une alerte avec /alerte",
+            "en": "🔕 No active alerts.\n\nCreate one with /alerte",
+            "es": "🔕 No hay alertas activas.\n\nCrea una con /alerte",
+            "pt": "🔕 Nenhum alerta ativo.\n\nCrie um com /alerte",
+        }
+        await message.answer(empty.get(lang, empty["fr"]))
+        return
 
-async def run_price_alerts(bot: Bot):
-    while True:
-        try:
-            alerts = await get_all_active_alerts()
-            if not alerts:
-                await asyncio.sleep(300)
-                continue
+    titles = {
+        "fr": f"🔔 *Tes alertes actives* ({len(alerts)}/3 free)\n\n",
+        "en": f"🔔 *Your active alerts* ({len(alerts)}/3 free)\n\n",
+        "es": f"🔔 *Tus alertas activas* ({len(alerts)}/3 free)\n\n",
+        "pt": f"🔔 *Seus alertas ativos* ({len(alerts)}/3 free)\n\n",
+    }
+    builder = InlineKeyboardBuilder()
+    lines = [titles.get(lang, titles["fr"])]
+    condition_labels = {"above": "📈 >", "below": "📉 <"}
 
-            prices = await get_crypto_prices()
-            if not prices:
-                await asyncio.sleep(300)
-                continue
+    for alert in alerts:
+        cond = condition_labels[alert["condition"]]
+        lines.append(f"🪙 *{alert['symbol']}* {cond} ${float(alert['target_price']):,.0f}")
+        builder.button(
+            text=f"🗑 {alert['symbol']} {cond} ${float(alert['target_price']):,.0f}",
+            callback_data=f"alert_delete:{alert['id']}"
+        )
+    builder.adjust(1)
 
-            for alert in alerts:
-                symbol = alert["symbol"].upper().replace("/USDT", "").replace("/USD", "")
-                current_price = prices.get(symbol, {}).get("price")
-                if current_price is None:
-                    continue
+    await message.answer("\n".join(lines), reply_markup=builder.as_markup(), parse_mode="Markdown")
 
-                target = float(alert["target_price"])
-                triggered = (
-                    alert["condition"] == "above" and current_price >= target
-                ) or (
-                    alert["condition"] == "below" and current_price <= target
-                )
+@router.callback_query(F.data.startswith("alert_delete:"))
+async def cb_alert_delete(callback: CallbackQuery):
+    alert_id = int(callback.data.split(":")[1])
+    user_id = callback.from_user.id
+    user = await get_user(user_id)
+    lang = user["language"] if user else "fr"
+    deleted = await delete_alert(alert_id, user_id)
+    texts_ok = {"fr": "✅ Alerte supprimée.", "en": "✅ Alert deleted.", "es": "✅ Alerta eliminada.", "pt": "✅ Alerta excluído."}
+    texts_ko = {"fr": "❌ Alerte introuvable.", "en": "❌ Alert not found.", "es": "❌ Alerta no encontrada.", "pt": "❌ Alerta não encontrado."}
+    texts = texts_ok if deleted else texts_ko
+    await callback.answer(texts.get(lang, texts["fr"]), show_alert=True)
+    await callback.message.delete()
 
-                if triggered:
-                    await deactivate_alert(alert["id"])
-                    lang = alert.get("language", "fr")
-                    direction = ">" if alert["condition"] == "above" else "<"
+# ─── Rappel journal depuis alerte déclenchée ─────────────────────
 
-                    # Message principal
-                    messages = {
-                        "fr": (
-                            f"🔔 *Alerte déclenchée !*\n\n"
-                            f"*{symbol}* a atteint ${current_price:,.0f}\n"
-                            f"Ton objectif était : {direction} ${target:,.0f}\n\n"
-                            f"💡 Analyse la situation avant d'agir.\n\n"
-                            f"*Tu as pris le trade ?*"
-                        ),
-                        "en": (
-                            f"🔔 *Alert triggered!*\n\n"
-                            f"*{symbol}* reached ${current_price:,.0f}\n"
-                            f"Your target was: {direction} ${target:,.0f}\n\n"
-                            f"💡 Analyze the situation before acting.\n\n"
-                            f"*Did you take the trade?*"
-                        ),
-                        "es": (
-                            f"🔔 *¡Alerta activada!*\n\n"
-                            f"*{symbol}* ha alcanzado ${current_price:,.0f}\n"
-                            f"Tu objetivo era: {direction} ${target:,.0f}\n\n"
-                            f"💡 Analiza la situación antes de actuar.\n\n"
-                            f"*¿Tomaste el trade?*"
-                        ),
-                        "pt": (
-                            f"🔔 *Alerta disparado!*\n\n"
-                            f"*{symbol}* atingiu ${current_price:,.0f}\n"
-                            f"Seu alvo era: {direction} ${target:,.0f}\n\n"
-                            f"💡 Analise a situação antes de agir.\n\n"
-                            f"*Você entrou no trade?*"
-                        ),
-                    }
+@router.callback_query(F.data.startswith("alert_journal:"))
+async def cb_alert_journal(callback: CallbackQuery, state: FSMContext):
+    symbol = callback.data.split(":")[1]
+    user = await get_user(callback.from_user.id)
+    lang = user["language"] if user else "fr"
 
-                    # Boutons rappel journal
-                    builder = InlineKeyboardBuilder()
-                    journal_labels = {
-                        "fr": f"📓 Journaliser {symbol}",
-                        "en": f"📓 Log {symbol} trade",
-                        "es": f"📓 Registrar {symbol}",
-                        "pt": f"📓 Registrar {symbol}",
-                    }
-                    ignore_labels = {
-                        "fr": "⏭ Ignorer",
-                        "en": "⏭ Skip",
-                        "es": "⏭ Ignorar",
-                        "pt": "⏭ Ignorar",
-                    }
-                    builder.button(
-                        text=journal_labels.get(lang, journal_labels["fr"]),
-                        callback_data=f"alert_journal:{symbol}"
-                    )
-                    builder.button(
-                        text=ignore_labels.get(lang, ignore_labels["fr"]),
-                        callback_data="alert_journal_skip"
-                    )
-                    builder.adjust(1)
+    # Pré-remplit le symbole et lance le flux journal
+    await state.update_data(language=lang, symbol=symbol)
 
-                    try:
-                        await bot.send_message(
-                            alert["user_id"],
-                            messages.get(lang, messages["fr"]),
-                            reply_markup=builder.as_markup(),
-                            parse_mode="Markdown"
-                        )
-                    except Exception as e:
-                        logger.error(f"Erreur alerte {alert['id']}: {e}")
+    builder = InlineKeyboardBuilder()
+    labels = {
+        "fr": [("🟢 ACHAT", "buy"), ("🔴 VENTE", "sell")],
+        "en": [("🟢 BUY", "buy"), ("🔴 SELL", "sell")],
+        "es": [("🟢 COMPRA", "buy"), ("🔴 VENTA", "sell")],
+        "pt": [("🟢 COMPRA", "buy"), ("🔴 VENDA", "sell")],
+    }
+    for text, val in labels.get(lang, labels["fr"]):
+        builder.button(text=text, callback_data=f"journal_side:{val}")
+    builder.adjust(2)
 
-        except Exception as e:
-            logger.error(f"Erreur run_price_alerts: {e}")
-        await asyncio.sleep(300)
+    texts = {
+        "fr": f"📓 *Journal — {symbol}*\n\nDirection du trade :",
+        "en": f"📓 *Journal — {symbol}*\n\nTrade direction:",
+        "es": f"📓 *Diario — {symbol}*\n\nDirección del trade:",
+        "pt": f"📓 *Diário — {symbol}*\n\nDireção do trade:",
+    }
+    from bot.journal_handlers import JournalSetup
+    await callback.message.edit_text(texts.get(lang, texts["fr"]), reply_markup=builder.as_markup(), parse_mode="Markdown")
+    await state.set_state(JournalSetup.waiting_side)
+    await callback.answer()
+
+@router.callback_query(F.data == "alert_journal_skip")
+async def cb_alert_journal_skip(callback: CallbackQuery):
+    await callback.message.edit_reply_markup()
+    await callback.answer()
