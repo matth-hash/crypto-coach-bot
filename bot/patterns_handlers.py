@@ -4,7 +4,10 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from database import get_user, create_price_alert, save_detected_pattern
+from database import (
+    get_user, create_price_alert, save_detected_pattern,
+    check_free_limit, increment_daily_usage
+)
 
 router = Router()
 
@@ -15,6 +18,37 @@ class PatternScan(StatesGroup):
     waiting_asset = State()
     waiting_timeframe = State()
 
+# ─── Upgrade message helper ───────────────────────────────────────
+
+def _upgrade_msg(lang: str, used: int, limit: int) -> str:
+    msgs = {
+        "fr": (
+            f"⛔ *Limite atteinte* ({used}/{limit} scans aujourd'hui)\n\n"
+            f"Le plan gratuit est limité à *{limit} scans de patterns par jour*.\n"
+            f"Passe Premium pour des scans illimités ! 🚀\n\n"
+            f"/premium — Voir les offres"
+        ),
+        "en": (
+            f"⛔ *Limit reached* ({used}/{limit} scans today)\n\n"
+            f"The free plan is limited to *{limit} pattern scans per day*.\n"
+            f"Upgrade to Premium for unlimited scans! 🚀\n\n"
+            f"/premium — View plans"
+        ),
+        "es": (
+            f"⛔ *Límite alcanzado* ({used}/{limit} scans hoy)\n\n"
+            f"El plan gratuito está limitado a *{limit} scans de patrones por día*.\n"
+            f"¡Actualiza a Premium para scans ilimitados! 🚀\n\n"
+            f"/premium — Ver planes"
+        ),
+        "pt": (
+            f"⛔ *Limite atingido* ({used}/{limit} scans hoje)\n\n"
+            f"O plano gratuito é limitado a *{limit} scans de padrões por dia*.\n"
+            f"Atualize para Premium para scans ilimitados! 🚀\n\n"
+            f"/premium — Ver planos"
+        ),
+    }
+    return msgs.get(lang, msgs["en"])
+
 # ─── /patterns ───────────────────────────────────────────────────
 
 @router.message(Command("patterns"))
@@ -22,6 +56,16 @@ async def cmd_patterns(message: Message, state: FSMContext):
     user_id = message.from_user.id
     user = await get_user(user_id)
     lang = user["language"] if user else "fr"
+
+    # Gate freemium
+    limit_check = await check_free_limit(user_id, "patterns")
+    if not limit_check["allowed"]:
+        await message.answer(
+            _upgrade_msg(lang, limit_check["used"], limit_check["limit"]),
+            parse_mode="Markdown"
+        )
+        return
+
     await state.update_data(language=lang)
 
     builder = InlineKeyboardBuilder()
@@ -33,11 +77,20 @@ async def cmd_patterns(message: Message, state: FSMContext):
     )
     builder.adjust(4)
 
+    # Affiche les scans restants pour les free users
+    remaining = limit_check["limit"] - limit_check["used"] if limit_check["limit"] > 0 else "∞"
+    remaining_str = {
+        "fr": f"\n_Scans restants aujourd'hui : {remaining}_" if limit_check["limit"] > 0 else "",
+        "en": f"\n_Scans remaining today: {remaining}_" if limit_check["limit"] > 0 else "",
+        "es": f"\n_Scans restantes hoy: {remaining}_" if limit_check["limit"] > 0 else "",
+        "pt": f"\n_Scans restantes hoje: {remaining}_" if limit_check["limit"] > 0 else "",
+    }.get(lang, "")
+
     titles = {
-        "fr": "📐 *Analyse de Patterns*\n\nSur quel asset veux-tu scanner les patterns ?",
-        "en": "📐 *Pattern Analysis*\n\nWhich asset do you want to scan?",
-        "es": "📐 *Análisis de Patrones*\n\n¿En qué activo quieres escanear patrones?",
-        "pt": "📐 *Análise de Padrões*\n\nEm qual ativo você quer escanear padrões?",
+        "fr": f"📐 *Analyse de Patterns*\n\nSur quel asset veux-tu scanner les patterns ?{remaining_str}",
+        "en": f"📐 *Pattern Analysis*\n\nWhich asset do you want to scan?{remaining_str}",
+        "es": f"📐 *Análisis de Patrones*\n\n¿En qué activo quieres escanear patrones?{remaining_str}",
+        "pt": f"📐 *Análise de Padrões*\n\nEm qual ativo você quer escanear padrões?{remaining_str}",
     }
     await message.answer(titles.get(lang, titles["fr"]), reply_markup=builder.as_markup(), parse_mode="Markdown")
     await state.set_state(PatternScan.waiting_asset)
@@ -75,7 +128,6 @@ async def _ask_timeframe(msg, lang, state, edit=False):
         labels = {"H1": "1 Heure", "H4": "4 Heures", "D1": "Journalier"}
         builder.button(text=f"⏱ {tf} — {labels[tf]}", callback_data=f"pat_tf:{tf}")
     builder.adjust(1)
-
     texts = {"fr": "⏱ *Timeframe* de l'analyse :", "en": "⏱ *Timeframe* for analysis:", "es": "⏱ *Timeframe* del análisis:", "pt": "⏱ *Timeframe* da análise:"}
     if edit:
         await msg.edit_text(texts.get(lang, texts["fr"]), reply_markup=builder.as_markup(), parse_mode="Markdown")
@@ -89,6 +141,7 @@ async def cb_pat_timeframe(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     lang = data.get("language", "fr")
     asset = data.get("asset", "BTC")
+    user_id = callback.from_user.id
 
     loading = {
         "fr": f"🔍 Scan de {asset}/{timeframe} en cours...\n_Récupération des données OHLCV + calcul des indicateurs_",
@@ -99,13 +152,16 @@ async def cb_pat_timeframe(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(loading.get(lang, loading["fr"]), parse_mode="Markdown")
     await state.clear()
 
+    # Incrément compteur avant le scan
+    await increment_daily_usage(user_id, "patterns")
+
     from patterns_engine import analyze_asset
     result = await analyze_asset(asset, timeframe)
 
     if not result:
         errors = {
-            "fr": f"❌ Impossible de récupérer les données pour {asset}.\nVérifie que le symbole est disponible sur Binance.",
-            "en": f"❌ Unable to fetch data for {asset}.\nCheck that the symbol is available on Binance.",
+            "fr": f"❌ Impossible de récupérer les données pour {asset}.\nVérifie que le symbole est disponible.",
+            "en": f"❌ Unable to fetch data for {asset}.\nCheck that the symbol is available.",
             "es": f"❌ No se pueden obtener datos para {asset}.",
             "pt": f"❌ Não foi possível obter dados para {asset}.",
         }
@@ -113,10 +169,9 @@ async def cb_pat_timeframe(callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         return
 
-    # Sauvegarde en base
     try:
         await save_detected_pattern(
-            user_id=callback.from_user.id,
+            user_id=user_id,
             symbol=asset,
             timeframe=timeframe,
             pattern_name=result["pattern"]["name"],
@@ -130,7 +185,6 @@ async def cb_pat_timeframe(callback: CallbackQuery, state: FSMContext):
 
     text = _format_result(result, lang)
     builder = _build_alert_keyboard(result, lang)
-
     await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="Markdown")
     await callback.answer()
 
@@ -148,34 +202,27 @@ def _format_result(result: dict, lang: str) -> str:
     symbol = result["symbol"]
     timeframe = result["timeframe"]
 
-    # RSI label
     if rsi < 30:        rsi_label = "🟢 Survente" if lang == "fr" else "🟢 Oversold"
     elif rsi > 70:      rsi_label = "🔴 Surachat" if lang == "fr" else "🔴 Overbought"
     else:               rsi_label = "😐 Neutre" if lang == "fr" else "😐 Neutral"
 
-    # MACD label
     macd_cross_labels = {
         "bullish": {"fr": "🟢 Croisement haussier", "en": "🟢 Bullish cross", "es": "🟢 Cruce alcista", "pt": "🟢 Cruzamento altista"},
         "bearish": {"fr": "🔴 Croisement baissier", "en": "🔴 Bearish cross", "es": "🔴 Cruce bajista", "pt": "🔴 Cruzamento baixista"},
         "neutral": {"fr": "😐 Neutre", "en": "😐 Neutral", "es": "😐 Neutral", "pt": "😐 Neutro"},
     }
     macd_label = macd_cross_labels.get(macd["cross"], macd_cross_labels["neutral"]).get(lang, "😐 Neutral")
-
-    # Type emoji
     type_emoji = {"bullish": "🟢", "bearish": "🔴", "neutral": "🟡"}.get(pattern["type"], "🟡")
 
-    # Multi-timeframe
     mtf_line = ""
     if multitf:
         mtf_line = "\n" + {"fr": "⚠️ Signal confirmé sur timeframe supérieur !", "en": "⚠️ Signal confirmed on higher timeframe!", "es": "⚠️ ¡Señal confirmada en timeframe superior!", "pt": "⚠️ Sinal confirmado no timeframe superior!"}.get(lang, "⚠️ Multi-TF confirmed!")
 
-    # Neckline et target
     neckline = pattern.get("neckline")
     target = pattern.get("target")
     neckline_line = f"\n📍 Neckline : ${neckline:,.2f}" if neckline else ""
     target_line = f"\n🎯 Cible : ${target:,.2f}" if target else ""
 
-    # Fibonacci
     fib_line = (
         f"\n\n📏 *Fibonacci*\n"
         f"• 0.382 : ${fib['0.382']:,.2f}\n"
@@ -183,14 +230,19 @@ def _format_result(result: dict, lang: str) -> str:
         f"• 0.618 : ${fib['0.618']:,.2f}"
     )
 
-    # Volume
-    vol_str = f"{vol_ratio:.1f}x la moyenne"
-
     support = pattern.get("support")
     resistance = pattern.get("resistance")
     sr_line = ""
     if support and resistance:
         sr_line = f"\n🛡 Support : ${support:,.2f} | 📊 Résistance : ${resistance:,.2f}"
+
+    # Disclaimer
+    disclaimer = {
+        "fr": "\n\n_⚠️ Signal technique uniquement. Confirme toujours avec le contexte macro._",
+        "en": "\n\n_⚠️ Technical signal only. Always confirm with macro context._",
+        "es": "\n\n_⚠️ Solo señal técnica. Confirma siempre con el contexto macro._",
+        "pt": "\n\n_⚠️ Apenas sinal técnico. Sempre confirme com o contexto macro._",
+    }
 
     titles = {
         "fr": f"📐 *{pattern['name']}* — {symbol}/{timeframe}\n{type_emoji} Signal {pattern['type']}",
@@ -203,21 +255,18 @@ def _format_result(result: dict, lang: str) -> str:
         f"{titles.get(lang, titles['fr'])}\n"
         f"{stars} — {result['stars']}/5\n"
         f"\n💰 Prix actuel : ${current:,.2f}"
-        f"{neckline_line}"
-        f"{target_line}"
-        f"{sr_line}"
+        f"{neckline_line}{target_line}{sr_line}"
         f"\n\n📊 *Indicateurs*\n"
         f"• RSI 14 : {rsi} — {rsi_label}\n"
         f"• MACD : {macd_label}\n"
-        f"• Volume : {vol_str}"
-        f"{mtf_line}"
-        f"{fib_line}"
+        f"• Volume : {vol_ratio:.1f}x la moyenne"
+        f"{mtf_line}{fib_line}"
+        f"{disclaimer.get(lang, disclaimer['en'])}"
     )
 
 def _build_alert_keyboard(result: dict, lang: str):
     pattern = result["pattern"]
     builder = InlineKeyboardBuilder()
-
     alert_price = pattern.get("alert_price")
     alert_condition = pattern.get("alert_condition", "above")
     symbol = result["symbol"]
@@ -249,6 +298,17 @@ async def cb_pat_alert(callback: CallbackQuery):
     user = await get_user(user_id)
     lang = user["language"] if user else "fr"
 
+    # Gate freemium alertes
+    limit_check = await check_free_limit(user_id, "alerts")
+    if not limit_check["allowed"]:
+        from bot.alerts_handlers import _upgrade_msg
+        await callback.message.edit_text(
+            _upgrade_msg(lang, limit_check["used"], limit_check["limit"]),
+            parse_mode="Markdown"
+        )
+        await callback.answer()
+        return
+
     try:
         target_price = float(price_str)
         await create_price_alert(user_id, symbol, condition, target_price)
@@ -266,10 +326,20 @@ async def cb_pat_alert(callback: CallbackQuery):
 
 @router.callback_query(F.data == "pat_restart")
 async def cb_pat_restart(callback: CallbackQuery, state: FSMContext):
-    user = await get_user(callback.from_user.id)
+    user_id = callback.from_user.id
+    user = await get_user(user_id)
     lang = user["language"] if user else "fr"
-    await state.update_data(language=lang)
 
+    limit_check = await check_free_limit(user_id, "patterns")
+    if not limit_check["allowed"]:
+        await callback.message.edit_text(
+            _upgrade_msg(lang, limit_check["used"], limit_check["limit"]),
+            parse_mode="Markdown"
+        )
+        await callback.answer()
+        return
+
+    await state.update_data(language=lang)
     builder = InlineKeyboardBuilder()
     for asset in ASSETS:
         builder.button(text=f"🪙 {asset}", callback_data=f"pat_asset:{asset}")
